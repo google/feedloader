@@ -1,0 +1,22 @@
+# Copyright 2021 Google LLC.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+steps:
+- name: 'gcr.io/cloud-builders/gcloud'
+  entrypoint: '/bin/bash'
+  args: ['-c', 'cp feed_schema_config.json cloud_functions/gcs-bq-retry-feed-load/config.json']
+- name: 'gcr.io/cloud-builders/gcloud'
+  args: ['functions', 'deploy', 'reprocessFeedfile', '--retry', '--timeout', '540s', '--set-env-vars', 'BQ_DATASET=${_BQ_DATASET},FEED_BUCKET=${_FEED_BUCKET},UPDATE_BUCKET=${_UPDATE_BUCKET},COMPLETED_FILES_BUCKET=${_COMPLETED_FILES_BUCKET},RETRIGGER_BUCKET=${_RETRIGGER_BUCKET}', '--trigger-resource', '${_RETRIGGER_BUCKET}', '--trigger-event', 'google.storage.object.finalize', '--runtime', 'nodejs8']
+  dir: 'cloud_functions/gcs-bq-retry-feed-load'
+timeout: 3600s

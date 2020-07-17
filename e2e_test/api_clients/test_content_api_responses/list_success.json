@@ -1,0 +1,25 @@
+{
+ "kind": "content#productsListResponse",
+ "resources": [
+  {
+   "kind": "content#product",
+   "id": "online:ja:JP:test1",
+   "offerId": "test1",
+   "source": "api",
+   "title": "test1",
+   "contentLanguage": "ja",
+   "targetCountry": "JP",
+   "channel": "online"
+  },
+  {
+   "kind": "content#product",
+   "id": "online:ja:JP:test0",
+   "offerId": "test0",
+   "source": "api",
+   "title": "test0",
+   "contentLanguage": "ja",
+   "targetCountry": "JP",
+   "channel": "online"
+  }
+ ]
+}

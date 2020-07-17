@@ -1,0 +1,59 @@
+# Copyright 2021 Google LLC.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Configuration rationale:
+#
+#  name
+#  Set to the name of the Task Queue instance.
+#
+#  rate
+#  Set to 60/m to align with external API quota (60 http requests / min).
+#
+#  bucket_size
+#  Set to 8 as we have 8 instances of App Engine handlers.
+#
+#  task_retry_limit
+#  Set to a moderate value to limit retries in case of technical issues.
+#
+#  min_backoff_seconds
+#  Set to a reasonable delay to allow other tasks to run while pending.
+#
+#  max_backoff_seconds
+#  Set to a moderate limit so temporarily failed tasks cannot cause long delays.
+#
+#  target
+#  Set to the name of the service that handles pushed tasks.
+#
+#  max_concurrent_requests
+#  Set to 8 as we have 8 available CPU cores to run (each GAE is single core).
+
+queue:
+  - name: processing-items
+    rate: 60/m
+    bucket_size: 24
+    retry_parameters:
+      task_retry_limit: 5
+      min_backoff_seconds: 60
+      max_backoff_seconds: 120
+    target: uploader
+    max_concurrent_requests: 24
+  - name: trigger-initiator
+    rate: 1/m
+    bucket_size: 1
+    retry_parameters:
+      task_retry_limit: 5
+      min_backoff_seconds: 300
+      max_backoff_seconds: 600
+    target: default
+    max_concurrent_requests: 1

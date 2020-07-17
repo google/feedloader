@@ -1,0 +1,27 @@
+# Copyright 2021 Google LLC.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+steps:
+- name: python:3
+  entrypoint: /bin/sh
+  args:
+    - -c
+    - pip install google-auth requests && python composer/get_cc_client_id.py ${_GCP_PROJECT} ${_REGION} ${_CLOUD_COMPOSER_ENV_NAME} > /workspace/cc_client_id
+- name: gcr.io/cloud-builders/gcloud
+  entrypoint: /bin/sh
+  dir: cloud_functions/trigger-monitor-dag-function
+  args:
+    - -c
+    - gcloud functions deploy triggerDag --retry --timeout 540s --set-env-vars PROJECT_ID=${_GCP_PROJECT},CLIENT_ID=$(cat /workspace/cc_client_id),WEBSERVER_ID=${_AIRFLOW_WEBSERVER_ID},DAG_NAME=${_DAG_ID} --trigger-resource ${_TRIGGER_COMPLETION_BUCKET} --trigger-event google.storage.object.finalize --runtime nodejs8
+timeout: 3600s

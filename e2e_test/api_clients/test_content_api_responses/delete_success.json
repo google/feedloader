@@ -1,0 +1,13 @@
+{
+ "kind": "content#productsCustomBatchResponse",
+ "entries": [
+  {
+   "kind": "content#productsCustomBatchResponseEntry",
+   "batchId": 0
+  },
+  {
+   "kind": "content#productsCustomBatchResponseEntry",
+   "batchId": 1
+  }
+ ]
+}

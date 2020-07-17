@@ -1,0 +1,29 @@
+{
+  "mapping": [
+  {"csvHeader": "id", "bqColumn": "item_id", "columnType": "STRING"},
+  {"csvHeader": "title", "bqColumn": "title", "columnType": "STRING"},
+  {"csvHeader": "description", "bqColumn": "description", "columnType": "STRING"},
+  {"csvHeader": "google_product_category", "bqColumn": "google_product_category", "columnType": "STRING"},
+  {"csvHeader": "product_type", "bqColumn": "product_type", "columnType": "STRING"},
+  {"csvHeader": "link", "bqColumn": "link", "columnType": "STRING"},
+  {"csvHeader": "image_link", "bqColumn": "image_link", "columnType": "STRING"},
+  {"csvHeader": "additional_image_link", "bqColumn": "additional_image_link", "columnType": "STRING"},
+  {"csvHeader": "condition", "bqColumn": "condition", "columnType": "STRING"},
+  {"csvHeader": "availability", "bqColumn": "availability", "columnType": "STRING"},
+  {"csvHeader": "price", "bqColumn": "price", "columnType": "INTEGER"},
+  {"csvHeader": "brand", "bqColumn": "brand", "columnType": "STRING"},
+  {"csvHeader": "gtin", "bqColumn": "gtin", "columnType": "STRING"},
+  {"csvHeader": "mpn", "bqColumn": "mpn", "columnType": "STRING"},
+  {"csvHeader": "shipping", "bqColumn": "shipping", "columnType": "STRING"},
+  {"csvHeader": "loyalty_points", "bqColumn": "loyalty_points", "columnType": "STRING"},
+  {"csvHeader": "adwords_redirect", "bqColumn": "adwords_redirect", "columnType": "STRING"},
+  {"csvHeader": "color", "bqColumn": "color", "columnType": "STRING"},
+  {"csvHeader": "size", "bqColumn": "size", "columnType": "STRING"},
+  {"csvHeader": "custom_label_0", "bqColumn": "custom_label_0", "columnType": "STRING"},
+  {"csvHeader": "custom_label_1", "bqColumn": "custom_label_1", "columnType": "STRING"},
+  {"csvHeader": "custom_label_2", "bqColumn": "custom_label_2", "columnType": "STRING"},
+  {"csvHeader": "custom_label_3", "bqColumn": "custom_label_3", "columnType": "STRING"},
+  {"csvHeader": "custom_label_4", "bqColumn": "custom_label_4", "columnType": "STRING"},
+  {"csvHeader": "identifier exists", "bqColumn": "identifier_exists", "columnType": "BOOLEAN"}
+  ]
+}

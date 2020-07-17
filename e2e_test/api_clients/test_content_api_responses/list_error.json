@@ -1,0 +1,13 @@
+{
+ "error": {
+  "errors": [
+   {
+    "domain": "content.ContentErrorDomain",
+    "reason": "auth/account_access_denied",
+    "message": "User cannot access account 133590175"
+   }
+  ],
+  "code": 401,
+  "message": "User cannot access account 133590175"
+ }
+}
