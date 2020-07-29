@@ -246,17 +246,6 @@ Shoptimizer API unit tests.
 Other tests will need to be run manually via Ava (for Cloud Functions) and the
 packaged test runners for Python App Engine code.
 
-### Integration Tests (Shoptimizer API only)
-
-Feedloader includes a Postman collection that can be used to send mock requests
-to the Shoptimizer API. The collection also has built-in tests that can be run
-all at once to verify the API code. The environments can be set to point to your
-GCP Cloud Run endpoints to run against the currently-deployed containerized API.
-A token is necessary to supply to the requests, and can be specified in the
-Postman environment settings. To retrieve this token, use
-[this CLI command](https://cloud.google.com/sdk/gcloud/reference/auth/print-identity-token)
-for your GCP project.
-
 ### End-To-End Tests
 
 Feedloader comes packaged with several bash test scripts that kick off actual

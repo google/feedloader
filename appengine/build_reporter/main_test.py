@@ -43,14 +43,14 @@ class MainTest(unittest.TestCase):
     self.assertEqual(httplib.OK, response.status_code)
 
   def test_pubsub_push_success(self):
-    request_data = pubsub_msgs.STATUS_SUCCESS_TAG_SHOPTIMIZER
+    request_data = pubsub_msgs.STATUS_SUCCESS_TAG_FEEDLOADER
     response = self.test_client.post('pubsub/push', data=request_data)
     sent_messages = self.mail_stub.get_sent_messages()
     self.assertEqual(1, len(sent_messages))
     self.assertEqual(httplib.OK, response.status_code)
 
   def test_email_not_sent_when_status_not_in_statuses_to_report(self):
-    request_data = pubsub_msgs.STATUS_WAITING_TAG_SHOPTIMIZER
+    request_data = pubsub_msgs.STATUS_WAITING_TAG_FEEDLOADER
     response = self.test_client.post('pubsub/push', data=request_data)
     sent_messages = self.mail_stub.get_sent_messages()
     self.assertEqual(0, len(sent_messages))

@@ -18,5 +18,5 @@ steps:
   args: ['-c', 'gcloud pubsub subscriptions update ${_CLOUD_BUILD_SUBSCRIPTION} --push-endpoint https://build-reporter-dot-${_GCP_PROJECT}.appspot.com/pubsub/push']
 - name: 'gcr.io/cloud-builders/gcloud'
   entrypoint: '/bin/bash'
-  args: ['-c', 'bash appengine/build_reporter/app.sh prod ${_GCP_PROJECT} ${_SHOPTIMIZER_BUILD_NOTIFICATION_EMAILS}']
+  args: ['-c', 'bash appengine/build_reporter/app.sh prod ${_GCP_PROJECT} ${_BUILD_NOTIFICATION_EMAILS}']
 timeout: 3600s

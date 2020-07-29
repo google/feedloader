@@ -58,7 +58,7 @@ SHOPTIMIZER_ENDPOINT = f'{SHOPTIMIZER_BASE_URL}/shoptimizer/v1/batch/optimize'
 # Type aliases
 BATCH = Dict[str, Any]
 BATCH_ID_TO_ITEM_ID = Dict[int, Any]
-PRODUCT_DICT = Dict[str, Any]
+PRODUCT = Dict[str, Any]
 
 
 # Enums

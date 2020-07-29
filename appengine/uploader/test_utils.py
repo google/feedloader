@@ -190,7 +190,7 @@ def generate_test_data(
 
 def generate_item_dict_api_pair(
     **kwargs: Dict[str, Any]
-) -> Tuple[str, constants.PRODUCT_DICT, constants.PRODUCT_DICT]:
+) -> Tuple[str, constants.PRODUCT, constants.PRODUCT]:
   """Generate a pair of data objects for testing.
 
   Generate a pair of objects here that can be used to compare. Initially

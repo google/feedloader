@@ -196,7 +196,7 @@ def _load_items_from_bigquery(
     items_iterator = bq_client.load_items(task.start_index, task.batch_size)
   except errors.HttpError as http_error:
     logging.exception(
-        f'Error loading items from %s.%s. HTTP status: %s. Error: %s',
+        'Error loading items from %s.%s. HTTP status: %s. Error: %s',
         constants.DATASET_ID_FOR_PROCESSING, table_id, http_error.resp.status,
         http_error.resp.reason)
     raise

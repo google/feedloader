@@ -29,7 +29,7 @@ app = flask.Flask(__name__)
 
 # The build statuses that will trigger a notification email.
 _STATUSES_TO_REPORT = ('SUCCESS', 'FAILURE')
-_TAGS_TO_REPORT = frozenset(['shoptimizer'])
+_TAGS_TO_REPORT = frozenset(['feedloader'])
 
 # Get environment variables
 _EMAIL_TO = os.getenv('EMAIL_TO')
@@ -60,7 +60,7 @@ def pubsub_push():
   request_body = json.loads(flask.request.data.decode('utf-8'))
   message = request_body.get('message', {})
   attributes = message.get('attributes', {})
-  decoded_data = base64.decodestring(message.get('data', ''))
+  decoded_data = base64.decodebytes(message.get('data', ''))
   data_dict = json.loads(decoded_data)
 
   status = attributes.get('status', '').upper()
@@ -97,7 +97,7 @@ def pubsub_push():
   html_body = template.render(template_values)
   message = mail.EmailMessage(
       sender='no-reply@{0}.appspotmail.com'.format(project_id),
-      subject='Shoptimizer Build Result: {}'.format(status),
+      subject='Feedloader Build Result: {}'.format(status),
       to=_EMAIL_TO,
       html=html_body)
   message.send()

@@ -84,8 +84,8 @@ def create_batch(
 
 
 def _convert_item_to_content_api_format(
-    batch_number: int, item_row: Union[bigquery.Row, constants.PRODUCT_DICT]
-) -> constants.PRODUCT_DICT:
+    batch_number: int, item_row: Union[bigquery.Row, constants.PRODUCT]
+) -> constants.PRODUCT:
   """Converts item to the format required by the API.
 
   Args:

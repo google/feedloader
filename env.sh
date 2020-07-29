@@ -17,6 +17,7 @@
 # Please change the values for your project.
 ALERT_EMAILS=[Comma-separated Email Addresses to receive alerts] # e.g. person1@domain.com, person2@domain.com
 ARCHIVE_BUCKET=[ARCHIVE BUCKET] # e.g. gs://archive
+BUILD_NOTIFICATION_EMAILS=[Comma-separated Email Addresses to receive completion emails when the App Engine build completes. Leave empty to send no emails.] # e.g. First Last <person1@domain.com>, First Last <person2@domain.com>
 COMPLETED_FILES_BUCKET=[COMPLETED FILES BUCKET] # e.g. gs://completed
 DELETES_THRESHOLD=[Threshold number of items that would be deleted to alert and abort processing]
 DRY_RUN=[Whether or not to use the dry-run flag during Content API calls. Must be either True or False]
@@ -30,7 +31,7 @@ LOCK_BUCKET=[Name of the bucket to store the calculateProductChanges EOF lock fi
 MERCHANT_ID=[ID of the Merchant Center Account ID to upload items to, or the MCA parent Id if an MCA.]
 MONITOR_BUCKET=[MONITOR BUCKET] # e.g. gs://monitor
 RETRIGGER_BUCKET=[RETRIGGER BUCKET] # e.g. gs://retrigger
-SHOPTIMIZER_BUILD_NOTIFICATION_EMAILS=[Comma-separated Email Addresses to receive completion emails when the Optimization API build completes. Leave empty to send no emails.] # e.g. First Last <person1@domain.com>, First Last <person2@domain.com>
+SHOPTIMIZER_URL=[The endpoint base URL of a Shoptimizer API deployment, if available] # e.g. https://shoptimizer-abcdefghij-kl.a.run.app
 SOURCE_REPO=[Name of the Git Cloud Source Repository to create]
 TIMEZONE_UTC_OFFSET=[The number of hours to offset from UTC time that represents your timezone, preceded by a + or -] # e.g. +09:00 or -08:00
 TRIGGER_COMPLETION_BUCKET=[Bucket name to trigger completion monitor] # e.g. gs://trigger-completion-check

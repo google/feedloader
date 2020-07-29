@@ -21,7 +21,7 @@ The messages fairly impenetrable since most information is base-64 encoded
 the status and associated build tags. These are included in the name of the
 messages for easy reference.
 """
-STATUS_SUCCESS_TAG_SHOPTIMIZER = (
+STATUS_SUCCESS_TAG_FEEDLOADER = (
     '{"message":{"attributes":{"buildId":"94f107c3-dce6-4a36-83eb-ba4e5ca29321","status":"SUCCESS"},'
     '"data":"eyJpZCI6Ijk0ZjEwN2MzLWRjZTYtNGEzNi04M2ViLWJhNGU1Y2EyOTMyMSIsInByb2plY3RJZCI6InNmby1ncmF'
     'oYW0tdGVzdCIsInN0YXR1cyI6IlNVQ0NFU1MiLCJzb3VyY2UiOnsicmVwb1NvdXJjZSI6eyJwcm9qZWN0SWQiOiJzZm8tZ3'
@@ -75,7 +75,7 @@ STATUS_SUCCESS_TAG_SHOPTIMIZER = (
     '"subscription":"projects/sfo-graham-test/subscriptions/push-to-gae-build-reporter"}'
 )
 
-STATUS_WAITING_TAG_SHOPTIMIZER = (
+STATUS_WAITING_TAG_FEEDLOADER = (
     '{"message":{"attributes":{"buildId":"94f107c3-dce6-4a36-83eb-ba4e5ca29321","status":"WAITING"},'
     '"data":"eyJpZCI6Ijk0ZjEwN2MzLWRjZTYtNGEzNi04M2ViLWJhNGU1Y2EyOTMyMSIsInByb2plY3RJZCI6InNmby1ncmF'
     'oYW0tdGVzdCIsInN0YXR1cyI6IlNVQ0NFU1MiLCJzb3VyY2UiOnsicmVwb1NvdXJjZSI6eyJwcm9qZWN0SWQiOiJzZm8tZ3'
