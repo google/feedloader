@@ -34,7 +34,7 @@ ROW_SCHEMA = {
     'title': 2,
     'description': 3,
     'google_product_category': 4,
-    'product_type': 5,
+    'product_types': 5,
     'link': 6,
     'image_link': 7,
     'additional_image_link': 8,
@@ -46,7 +46,7 @@ ROW_SCHEMA = {
     'mpn': 14,
     'shipping': 15,
     'loyalty_points': 16,
-    'adwords_redirect': 17,
+    'ads_redirect': 17,
     'color': 18,
     'size': 19,
     'custom_label_0': 20,
@@ -89,11 +89,11 @@ def generate_test_data(
     rows.append(
         bigquery.Row(
             (merchant_id, item['item_id'], item['title'], item['description'],
-             item['google_product_category'], item['product_type'],
+             item['google_product_category'], item['product_types'],
              item['link'], item['image_link'], item['additional_image_link'],
              item['condition'], item['availability'], item['price'],
              item['brand'], item['gtin'], item['mpn'], item['shipping'],
-             item['loyalty_points'], item['adwords_redirect'], item['color'],
+             item['loyalty_points'], item['ads_redirect'], item['color'],
              item['size'], item['custom_label_0'], item['custom_label_1'],
              item['custom_label_2'], item['custom_label_3'],
              item['custom_label_4'], item['identifier_exists']), ROW_SCHEMA))
@@ -146,8 +146,8 @@ def generate_test_data(
                   item['brand'],
               u'link':
                   item['link'],
-              u'adwordsRedirect':
-                  item['adwords_redirect'],
+              u'adsRedirect':
+                  item['ads_redirect'],
               u'customLabel4':
                   item['custom_label_4'],
               u'customLabel3':
@@ -164,8 +164,7 @@ def generate_test_data(
                   item['identifier_exists'],
               u'imageLink':
                   item['image_link'],
-              u'productType':
-                  item['product_type']
+              u'productTypes': [item['product_types']]
           }
       })
     elif method == constants.Method.DELETE:
@@ -215,7 +214,7 @@ def generate_item_dict_api_pair(
       'title': 'test title',
       'description': 'test description',
       'google_product_category': 'Test > Google > Product > Category',
-      'product_type': 'Test > Product > Type',
+      'product_types': 'Test > Product > Type',
       'link': 'https://test.example.co.jp/products/1/',
       'image_link': 'https://test.example.co.jp/products/1/image.jpg',
       'additional_image_link': None,
@@ -227,7 +226,7 @@ def generate_item_dict_api_pair(
       'mpn': 'ABC1234',
       'shipping': None,
       'loyalty_points': None,
-      'adwords_redirect': 'https://redir.ex.co.jp/product/1/',
+      'ads_redirect': 'https://redir.ex.co.jp/product/1/',
       'color': 'Blue',
       'size': 'M',
       'custom_label_0': None,
@@ -247,7 +246,7 @@ def generate_item_dict_api_pair(
       'title': item['title'],
       'description': item['description'],
       'googleProductCategory': item['google_product_category'],
-      'productType': item['product_type'],
+      'productTypes': [item['product_types']],
       'link': item['link'],
       'imageLink': item['image_link'],
       'additionalImageLinks': [],
@@ -262,7 +261,7 @@ def generate_item_dict_api_pair(
       'mpn': item['mpn'],
       'shipping': [],
       'loyaltyPoints': {},
-      'adwordsRedirect': item['adwords_redirect'],
+      'adsRedirect': item['ads_redirect'],
       'color': item['color'],
       'sizes': [item['size']],
       'customLabel0': item['custom_label_0'] if item['custom_label_0'] else '',

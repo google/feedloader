@@ -34,6 +34,8 @@ ITEM_WITH_LOYALTY_POINTS = {'loyalty_points': '100'}
 ITEM_WITH_TITLE_AND_SHIPPING = {'title': 'Ship!', 'shipping': 'JP:::650 JPY'}
 ITEM_WITH_CURRENCY_IN_PRICE = {'price': '100 JPY'}
 ITEM_WITH_GOOGLE_MERCHANT_ID = {'google_merchant_id': '0000'}
+ITEM_WITH_PRODUCT_TYPES = {'product_types': 'clothing'}
+ITEM_WITH_ADS_REDIRECT = {'ads_redirect': 'https://google.com'}
 
 
 class BatchCreatorTest(unittest.TestCase):
@@ -56,47 +58,49 @@ class BatchCreatorTest(unittest.TestCase):
   def test_snake_to_camel_case(self, test_value, expected_value):
     result = batch_creator._snake_to_camel_case(test_value)
 
-    self.assertEqual(result, expected_value)
+    self.assertEqual(expected_value, result)
 
-  @parameterized.expand([
-      ('custom_label_0', '', 'customLabel0', ''),
-      ('custom_label_0', None, 'customLabel0', ''),
-      ('shipping', '', 'shipping', []),
-      ('shipping', '123', 'shipping', []),
-      ('size', 'S', 'sizes', ['S']),
-      ('size', 'S,M,L', 'sizes', ['S', 'M', 'L']),
-      ('size', 'S M L', 'sizes', ['S M L']),
-      ('item_id', 'asdf', 'offerId', 'asdf'),
-      ('price', '100', 'price', {
-          'currency': constants.TARGET_CURRENCY,
-          'value': '100'
-      }),
-      ('price', '100JPY', 'price', {
-          'currency': constants.TARGET_CURRENCY,
-          'value': '100'
-      }),
-      ('price', '100 JPY', 'price', {
-          'currency': constants.TARGET_CURRENCY,
-          'value': '100'
-      }),
-      ('sale_price', '100', 'salePrice', {
-          'currency': constants.TARGET_CURRENCY,
-          'value': '100'
-      }),
-      ('sale_price', '100 JPY', 'salePrice', {
-          'currency': constants.TARGET_CURRENCY,
-          'value': '100'
-      }),
-      ('loyalty_points', '100', 'loyaltyPoints', {}),
-      ('loyalty_points', '', 'loyaltyPoints', {}),
-  ])
+  @parameterized.expand([('custom_label_0', '', 'customLabel0', ''),
+                         ('custom_label_0', None, 'customLabel0', ''),
+                         ('shipping', '', 'shipping', []),
+                         ('shipping', '123', 'shipping', []),
+                         ('size', 'S', 'sizes', ['S']),
+                         ('size', 'S,M,L', 'sizes', ['S', 'M', 'L']),
+                         ('size', 'S M L', 'sizes', ['S M L']),
+                         ('item_id', 'asdf', 'offerId', 'asdf'),
+                         ('price', '100', 'price', {
+                             'currency': constants.TARGET_CURRENCY,
+                             'value': '100'
+                         }),
+                         ('price', '100JPY', 'price', {
+                             'currency': constants.TARGET_CURRENCY,
+                             'value': '100'
+                         }),
+                         ('price', '100 JPY', 'price', {
+                             'currency': constants.TARGET_CURRENCY,
+                             'value': '100'
+                         }),
+                         ('sale_price', '100', 'salePrice', {
+                             'currency': constants.TARGET_CURRENCY,
+                             'value': '100'
+                         }),
+                         ('sale_price', '100 JPY', 'salePrice', {
+                             'currency': constants.TARGET_CURRENCY,
+                             'value': '100'
+                         }), ('loyalty_points', '100', 'loyaltyPoints', {}),
+                         ('loyalty_points', '', 'loyaltyPoints', {}),
+                         ('product_type', 'clothing,shoes', 'productTypes',
+                          ['clothing', 'shoes']),
+                         ('product_type', '', 'productTypes', []),
+                         ('adwords_redirect', 'https://google.com',
+                          'adsRedirect', 'https://google.com')])
   def test_convert_feed_field_to_api_field(self, key, value, new_key_expected,
                                            new_value_expected):
     new_key, new_value = batch_creator._convert_feed_field_to_api_field(
         key, value)
 
-    self.assertEqual(new_key, new_key_expected)
-    self.assertEqual(new_value, new_value_expected)
+    self.assertEqual(new_key_expected, new_key)
+    self.assertEqual(new_value_expected, new_value)
 
   @parameterized.expand([
       (ITEM_WITH_DESCRIPTION_EMPTY,),
@@ -119,6 +123,8 @@ class BatchCreatorTest(unittest.TestCase):
       (ITEM_WITH_TITLE_AND_SHIPPING,),
       (ITEM_WITH_CURRENCY_IN_PRICE,),
       (ITEM_WITH_GOOGLE_MERCHANT_ID,),
+      (ITEM_WITH_PRODUCT_TYPES,),
+      (ITEM_WITH_ADS_REDIRECT,),
   ])
   def test_convert_item_to_content_api_format(self, fields):
     batch_id = 0
@@ -128,7 +134,7 @@ class BatchCreatorTest(unittest.TestCase):
     api_formatted_item = batch_creator._convert_item_to_content_api_format(
         batch_id, item)
 
-    self.assertEqual(api_formatted_item, expected_api_formatted_item)
+    self.assertEqual(expected_api_formatted_item, api_formatted_item)
 
   @parameterized.expand([
       (True, test_utils.SINGLE_ITEM_COUNT),

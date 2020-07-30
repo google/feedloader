@@ -84,8 +84,8 @@ def create_batch(
 
 
 def _convert_item_to_content_api_format(
-    batch_number: int, item_row: Union[bigquery.Row, constants.PRODUCT]
-) -> constants.PRODUCT:
+    batch_number: int, item_row: Union[bigquery.Row,
+                                       constants.PRODUCT]) -> constants.PRODUCT:
   """Converts item to the format required by the API.
 
   Args:
@@ -115,49 +115,54 @@ def _convert_item_to_content_api_format(
   return api_formatted_item
 
 
-def _convert_feed_field_to_api_field(key: str, value: str) -> Tuple[str, str]:
+def _convert_feed_field_to_api_field(original_key: str,
+                                     original_value: str) -> Tuple[str, str]:
   """Converts attribute from feed format to API format.
 
   Args:
-    key: The name of the field in the input data
-    value: The value of the field in the input data
+    original_key: The name of the field in the input data
+    original_value: The value of the field in the input data
 
   Returns:
     Tuple that represents the field name used by the API (key) and the value of
     that field as expected in API format (new_value).
   """
-  if key in ('size', 'additional_image_link'):
-    new_key = _snake_to_camel_case(key) + 's'
-    new_value = value.split(',') if value is not None else []
-  elif key == 'item_id':
-    new_key = 'offerId'
-    new_value = value
-  elif key in ('price', 'sale_price'):
-    new_key = _snake_to_camel_case(key)
-    new_value = {
+  modified_key = _snake_to_camel_case(original_key)
+  if modified_key in ('size', 'additionalImageLink', 'productType'):
+    modified_key = modified_key + 's'
+    modified_value = original_value.split(',') if original_value else []
+  elif modified_key == 'itemId':
+    modified_key = 'offerId'
+    modified_value = original_value
+  elif modified_key in ('price', 'salePrice'):
+    modified_value = {
         'currency': constants.TARGET_CURRENCY,
-        'value': _strip_unwanted_chars(value)
+        'value': _strip_unwanted_chars(original_value)
     }
-  elif key == 'shipping':
-    new_key = _snake_to_camel_case(key)
-    new_value = []
-  elif key == 'loyalty_points':
-    new_key = _snake_to_camel_case(key)
-    new_value = {}
+  elif modified_key == 'shipping':
+    modified_value = []
+  elif modified_key == 'loyaltyPoints':
+    modified_value = {}
+  elif modified_key == 'adwordsRedirect':
+    modified_key = 'adsRedirect'
+    modified_value = original_value
+  elif modified_key == 'productTypes':
+    modified_value = original_value.split(',') if original_value else []
   else:
-    new_key = _snake_to_camel_case(key)
-    new_value = value if value is not None else ''
-  return new_key, new_value
+    modified_value = original_value if original_value is not None else ''
+  return modified_key, modified_value
 
 
-def _snake_to_camel_case(snake_case_text: str) -> str:
+def _snake_to_camel_case(original_text: str) -> str:
   """Converts attribute name from snake to camel case."""
-  camel_case_text = snake_case_text.lower().replace(' ', '_').split('_')
-  if len(camel_case_text) > 1:
-    return (camel_case_text[0] +
-            ''.join(token.capitalize() for token in camel_case_text[1:]))
+  if original_text:
+    original_text = original_text[0].lower() + original_text[1:]
+  components = original_text.replace(' ', '_').split('_')
+  if len(components) > 1:
+    return (components[0].lower() +
+            ''.join(token.capitalize() for token in components[1:]))
   else:
-    return camel_case_text[0]
+    return components[0]
 
 
 def _strip_unwanted_chars(price: Union[int, str]) -> str:
