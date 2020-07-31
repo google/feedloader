@@ -136,7 +136,7 @@ class MainTest(unittest.TestCase):
         headers={'X-AppEngine-TaskExecutionCount': '0'})
 
     self.mock_content_api_client.return_value.process_items.assert_any_call(
-        mock.ANY, mock.ANY, mock.ANY, constants.Method.INSERT, mock.ANY)
+        mock.ANY, mock.ANY, mock.ANY, constants.Method.INSERT)
 
   def test_run_process_should_call_content_api_with_insert_when_operation_is_prevent_expiring(
       self):
@@ -146,7 +146,7 @@ class MainTest(unittest.TestCase):
         headers={'X-AppEngine-TaskExecutionCount': '0'})
 
     self.mock_content_api_client.return_value.process_items.assert_any_call(
-        mock.ANY, mock.ANY, mock.ANY, constants.Method.INSERT, mock.ANY)
+        mock.ANY, mock.ANY, mock.ANY, constants.Method.INSERT)
 
   def test_run_process_should_call_content_api_with_delete_when_operation_is_delete(
       self):
@@ -156,7 +156,7 @@ class MainTest(unittest.TestCase):
         headers={'X-AppEngine-TaskExecutionCount': '0'})
 
     self.mock_content_api_client.return_value.process_items.assert_any_call(
-        mock.ANY, mock.ANY, mock.ANY, constants.Method.DELETE, mock.ANY)
+        mock.ANY, mock.ANY, mock.ANY, constants.Method.DELETE)
 
   @parameterized.expand(
       (('BAD REQUEST', http.HTTPStatus.BAD_REQUEST),

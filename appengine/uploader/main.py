@@ -136,11 +136,7 @@ def _run_process(operation: constants.Operation) -> Tuple[str, http.HTTPStatus]:
     # Sends batch of items to Content API for Shopping
     api_client = content_api_client.ContentApiClient()
     successful_item_ids, item_failures = api_client.process_items(
-        batch_to_send_to_content_api,
-        batch_number,
-        batch_id_to_item_id,
-        method,
-        dry_run=constants.DRY_RUN)
+        batch_to_send_to_content_api, batch_number, batch_id_to_item_id, method)
 
     result = process_result.ProcessResult(
         successfully_processed_item_ids=successful_item_ids,

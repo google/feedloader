@@ -35,6 +35,6 @@ steps:
   entrypoint: /bin/sh
   args:
   - -c
-  - bash appengine/uploader/app.sh prod ${_GCP_PROJECT} ${_DRY_RUN} ${_IS_MCA} ${_MERCHANT_ID} ${_SHOPTIMIZER_URL}
+  - bash appengine/uploader/app.sh prod ${_GCP_PROJECT} ${_IS_MCA} ${_MERCHANT_ID} ${_SHOPTIMIZER_URL}
 timeout: 3600s
 tags: ['feedloader']

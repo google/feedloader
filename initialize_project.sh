@@ -1009,7 +1009,7 @@ CreateTrigger deploy_gae_build_reporter.yaml \
   _KEYRING="$KEYRING"::_KEYNAME="$KEYNAME"::_CLOUD_BUILD_SUBSCRIPTION="$CLOUD_BUILD_SUBSCRIPTION"::_GCP_PROJECT="$GCP_PROJECT"::_BUILD_NOTIFICATION_EMAILS="$BUILD_NOTIFICATION_EMAILS"
 CreateTrigger deploy_gae_uploader.yaml \
   "Deploy AppEngine uploader" \
-  _KEYRING="$KEYRING"::_KEYNAME="$KEYNAME"::_GCP_PROJECT="$GCP_PROJECT"::_DRY_RUN="$DRY_RUN"::_MERCHANT_ID="$MERCHANT_ID"::_IS_MCA="$IS_MCA"::_SHOPTIMIZER_URL="$SHOPTIMIZER_URL"
+  _KEYRING="$KEYRING"::_KEYNAME="$KEYNAME"::_GCP_PROJECT="$GCP_PROJECT"::_MERCHANT_ID="$MERCHANT_ID"::_IS_MCA="$IS_MCA"::_SHOPTIMIZER_URL="$SHOPTIMIZER_URL"
 # Encrypt Keys
 print_green "Generating encrypted versions of the service accounts so that Cloud Build can deploy stuff securely..."
 SECRET_KEYS=(

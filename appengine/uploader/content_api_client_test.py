@@ -26,7 +26,6 @@ import content_api_client
 import test_utils
 
 DUMMY_BATCH_NUMBER = 0
-DUMMY_DRY_RUN_FLAG = True
 
 
 class ModuleFunctionsTest(unittest.TestCase):
@@ -66,8 +65,7 @@ class ContentApiClientTest(unittest.TestCase):
     self._api_service.products.return_value.custombatch.return_value.execute.return_value = expected_response
 
     successful_item_ids, item_failures = self._client.process_items(
-        batch, DUMMY_BATCH_NUMBER, batch_id_to_item_id, method,
-        DUMMY_DRY_RUN_FLAG)
+        batch, DUMMY_BATCH_NUMBER, batch_id_to_item_id, method)
 
     self._api_service.products.return_value.custombatch.return_value.execute.assert_called(
     )
@@ -86,8 +84,7 @@ class ContentApiClientTest(unittest.TestCase):
     self._api_service.products.return_value.custombatch.return_value.execute.return_value = response_with_errors
 
     successful_item_ids, item_failures = self._client.process_items(
-        batch, DUMMY_BATCH_NUMBER, batch_id_to_item_id, constants.Method.INSERT,
-        DUMMY_DRY_RUN_FLAG)
+        batch, DUMMY_BATCH_NUMBER, batch_id_to_item_id, constants.Method.INSERT)
 
     self._api_service.products.return_value.custombatch.return_value.execute.assert_called(
     )
@@ -106,8 +103,7 @@ class ContentApiClientTest(unittest.TestCase):
     self._api_service.products.return_value.custombatch.return_value.execute.return_value = response_with_errors
 
     successful_item_ids, item_failures = self._client.process_items(
-        batch, DUMMY_BATCH_NUMBER, batch_id_to_item_id, constants.Method.DELETE,
-        DUMMY_DRY_RUN_FLAG)
+        batch, DUMMY_BATCH_NUMBER, batch_id_to_item_id, constants.Method.DELETE)
 
     self._api_service.products.return_value.custombatch.return_value.execute.assert_called(
     )
@@ -127,8 +123,7 @@ class ContentApiClientTest(unittest.TestCase):
     self._api_service.products.return_value.custombatch.return_value.execute.return_value = response_with_errors
 
     successful_item_ids, item_failures = self._client.process_items(
-        batch, DUMMY_BATCH_NUMBER, batch_id_to_item_id, constants.Method.INSERT,
-        DUMMY_DRY_RUN_FLAG)
+        batch, DUMMY_BATCH_NUMBER, batch_id_to_item_id, constants.Method.INSERT)
 
     self._api_service.products.return_value.custombatch.return_value.execute.assert_called(
     )

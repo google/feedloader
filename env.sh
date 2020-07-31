@@ -20,7 +20,6 @@ ARCHIVE_BUCKET=[ARCHIVE BUCKET] # e.g. gs://archive
 BUILD_NOTIFICATION_EMAILS=[Comma-separated Email Addresses to receive completion emails when the App Engine build completes. Leave empty to send no emails.] # e.g. First Last <person1@domain.com>, First Last <person2@domain.com>
 COMPLETED_FILES_BUCKET=[COMPLETED FILES BUCKET] # e.g. gs://completed
 DELETES_THRESHOLD=[Threshold number of items that would be deleted to alert and abort processing]
-DRY_RUN=[Whether or not to use the dry-run flag during Content API calls. Must be either True or False]
 EXPIRATION_THRESHOLD=[The number of days that can elapse before an unchanged item will be resent to Content API to prevent it from expiring. Unchanged items will expire in 30 days if not resent to Content API.] # e.g. 25.
 FEED_BUCKET=[FEED BUCKET] # e.g. gs://feed
 FILE_RANGE=[Range of files to limit the BigQuery import to e.g. "0-19"]

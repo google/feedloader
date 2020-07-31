@@ -42,7 +42,6 @@ CHANNEL = 'online'
 CONTENT_LANGUAGE = 'ja'
 TARGET_COUNTRY = 'JP'
 TARGET_CURRENCY = 'JPY'
-DRY_RUN = util.strtobool(os.environ['DRY_RUN'])
 IS_MCA = util.strtobool(os.environ['IS_MCA'])
 MERCHANT_ID = os.environ['MERCHANT_ID']
 

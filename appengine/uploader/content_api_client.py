@@ -53,12 +53,9 @@ class ContentApiClient(object):
           constants.CONFIG_DIRECTORY, constants.MC_SERVICE_ACCOUNT_FILE)
 
   def process_items(
-      self,
-      batch: constants.BATCH,
-      batch_number: int,
+      self, batch: constants.BATCH, batch_number: int,
       batch_id_to_item_id: constants.BATCH_ID_TO_ITEM_ID,
-      method: constants.Method,
-      dry_run: bool = False) -> Tuple[List[str], List[failure.Failure]]:
+      method: constants.Method) -> Tuple[List[str], List[failure.Failure]]:
     """Processes a list of items via a single batch to the API.
 
     Args:
@@ -66,17 +63,15 @@ class ContentApiClient(object):
       batch_number: Identifier for this batch.
       batch_id_to_item_id: Mapping from batch_id to item_id.
       method: Method being sent to the API.
-      dry_run: Flag to run the request in dry-run mode (passed to API).
 
     Returns:
       An instance of ContentApiResult.
     """
     try:
       number_of_items = len(batch.get('entries', []))
-      logging.info(
-          'Batch #%d: Received %d items to submit via API [dry_run=%r]',
-          batch_number, number_of_items, dry_run)
-      response = self._submit_batch(batch, dry_run)
+      logging.info('Batch #%d: Received %d items to submit via API',
+                   batch_number, number_of_items)
+      response = self._submit_batch(batch)
       successful_item_ids, item_failures = _handle_response(
           response, batch_number, batch_id_to_item_id)
       logging.info(
@@ -94,18 +89,16 @@ class ContentApiClient(object):
       raise
     return successful_item_ids, item_failures
 
-  def _submit_batch(self, batch: constants.BATCH,
-                    dry_run: bool) -> Dict[str, Any]:
+  def _submit_batch(self, batch: constants.BATCH) -> Dict[str, Any]:
     """Takes a batch object (JSON) and submits to GMC via the Shopping API.
 
     Args:
       batch: dict, JSON formatted for the API
-      dry_run: boolean, flag to the API to allow for testing
 
     Returns:
       The response from the API call (JSON formatted)
     """
-    request = self._service.products().custombatch(body=batch, dryRun=dry_run)
+    request = self._service.products().custombatch(body=batch)
     return request.execute()
 
 
