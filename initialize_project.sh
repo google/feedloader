@@ -30,6 +30,8 @@ ITEMS_TABLE=items
 KEYRING=cf_secret_keyring
 KEYNAME=cf_secret_key
 PROCESS_RESULT_TABLE_ID=process_result
+PUBSUB_TOPIC_MAILER=mailer-trigger
+PUBSUB_TOPIC_CLOUD_BUILD=cloud-build
 REGION=us-central1
 MAILER_SUBSCRIPTION=push-to-gae-mailer
 CLOUD_BUILD_SUBSCRIPTION=push-to-gae-build-reporter
@@ -71,7 +73,6 @@ REQUIRED_SERVICES=(
   bigquerydatatransfer.googleapis.com
   bigquery-json.googleapis.com
   cloudbuild.googleapis.com
-  composer.googleapis.com
   cloudfunctions.googleapis.com
   cloudkms.googleapis.com
   cloudtasks.googleapis.com
@@ -245,7 +246,8 @@ bq query \
 # Create Cloud Pub/Sub topics
 print_green "Creating PubSub topics and subscriptions..."
 REQUIRED_TOPICS=(
-  mailer-trigger
+  "$PUBSUB_TOPIC_MAILER"
+  "$PUBSUB_TOPIC_CLOUD_BUILD"
 )
 EXISTING_TOPICS=$(gcloud pubsub topics list)
 for TOPIC in "${REQUIRED_TOPICS[@]}"
@@ -264,7 +266,7 @@ then
   echo "Pub/Sub subscription $MAILER_SUBSCRIPTION already exists."
 else
   gcloud beta pubsub subscriptions create \
-      --topic mailer-trigger \
+      --topic "$PUBSUB_TOPIC_MAILER" \
       --push-endpoint https://mailer-dot-"$GCP_PROJECT".appspot.com/pubsub/push?token="$PUBSUB_TOKEN" \
       --ack-deadline 600 \
       --expiration-period never \
@@ -278,7 +280,7 @@ then
   echo "Pub/Sub subscription $CLOUD_BUILD_SUBSCRIPTION already exists."
 else
   gcloud beta pubsub subscriptions create \
-      --topic cloud-builds \
+      --topic $PUBSUB_TOPIC_CLOUD_BUILD \
       --push-endpoint https://build-reporter-dot-"$GCP_PROJECT".appspot.com/pubsub/push \
       --ack-deadline 600 \
       --expiration-period never \
@@ -346,8 +348,8 @@ else
     --zone "$CLOUD_COMPOSER_ZONE" \
     --python-version 3 \
     --machine-type n1-standard-1 \
-    --image-version composer-1.8.0-airflow-1.10.3 \
-    --env-variables PROJECT_ID="$GCP_PROJECT",LOCATION="$REGION",PUBSUB_TOPIC="mailer-trigger"
+    --image-version composer-1.11.1-airflow-1.10.3 \
+    --env-variables PROJECT_ID="$GCP_PROJECT",LOCATION="$REGION",PUBSUB_TOPIC="$PUBSUB_TOPIC_MAILER"
 fi
 
 COMPOSER_UPDATE_RESULT=$(gcloud composer environments update "$CLOUD_COMPOSER_ENV_NAME" \
