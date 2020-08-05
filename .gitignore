@@ -1,0 +1,7 @@
+/appengine/initiator/config/service_account.json
+/appengine/uploader/config/gcp_service_account.json
+/appengine/uploader/config/mc_service_account.json
+/cloud_functions/gmc-prevent-product-expiration/client_secret.json
+/composer/completion_monitor/config/service_account.json
+/cc_service_account.json
+/appengine/**/*Pipfile*
