@@ -53,8 +53,8 @@ class ContentApiClient(object):
           constants.CONFIG_DIRECTORY, constants.MC_SERVICE_ACCOUNT_FILE)
 
   def process_items(
-      self, batch: constants.BATCH, batch_number: int,
-      batch_id_to_item_id: constants.BATCH_ID_TO_ITEM_ID,
+      self, batch: constants.Batch, batch_number: int,
+      batch_id_to_item_id: constants.BatchIdToItemId,
       method: constants.Method) -> Tuple[List[str], List[failure.Failure]]:
     """Processes a list of items via a single batch to the API.
 
@@ -89,7 +89,7 @@ class ContentApiClient(object):
       raise
     return successful_item_ids, item_failures
 
-  def _submit_batch(self, batch: constants.BATCH) -> Dict[str, Any]:
+  def _submit_batch(self, batch: constants.Batch) -> Dict[str, Any]:
     """Takes a batch object (JSON) and submits to GMC via the Shopping API.
 
     Args:
@@ -104,7 +104,7 @@ class ContentApiClient(object):
 
 def _handle_response(
     response: Dict[str, Any], batch_number: int,
-    batch_id_to_item_id: constants.BATCH_ID_TO_ITEM_ID
+    batch_id_to_item_id: constants.BatchIdToItemId
 ) -> Tuple[List[str], List[failure.Failure]]:
   """Processes the response from an API call.
 

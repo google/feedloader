@@ -127,7 +127,7 @@ def _run_process(operation: constants.Operation) -> Tuple[str, http.HTTPStatus]:
         batch_number, items, method)
 
     # Optimizes batch via Shoptimizer for upsert/prevent_expiring operations
-    if operation != constants.Operation.DELETE:
+    if operation != constants.Operation.DELETE and constants.SHOPTIMIZER_API_INTEGRATION_ON:
       batch_to_send_to_content_api = _create_optimized_batch(
           original_batch, batch_number, operation)
     else:
@@ -199,8 +199,8 @@ def _load_items_from_bigquery(
   return list(items_iterator)
 
 
-def _create_optimized_batch(batch: constants.BATCH, batch_number: int,
-                            operation: constants.Operation) -> constants.BATCH:
+def _create_optimized_batch(batch: constants.Batch, batch_number: int,
+                            operation: constants.Operation) -> constants.Batch:
   """Creates an optimized batch by calling the Shoptimizer API.
 
   Args:

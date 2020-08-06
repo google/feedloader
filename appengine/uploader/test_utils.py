@@ -62,8 +62,8 @@ def generate_test_data(
     method: constants.Method,
     num_rows=1,
     remove_merchant_id=False
-) -> Tuple[List[bigquery.Row], constants.BATCH, constants.BATCH_ID_TO_ITEM_ID,
-           Dict[str, Any]]:
+) -> Tuple[List[bigquery.Row], constants.Batch, constants.BatchIdToItemId, Dict[
+    str, Any]]:
   """Generates a tuple containing a triplet of matching row, batch, response.
 
   Args:
@@ -188,8 +188,8 @@ def generate_test_data(
 
 
 def generate_item_dict_api_pair(
-    **kwargs: Dict[str, Any]
-) -> Tuple[str, constants.PRODUCT, constants.PRODUCT]:
+    **kwargs: Dict[str,
+                   Any]) -> Tuple[str, constants.Product, constants.Product]:
   """Generate a pair of data objects for testing.
 
   Generate a pair of objects here that can be used to compare. Initially

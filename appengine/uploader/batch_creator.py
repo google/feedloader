@@ -31,7 +31,7 @@ _PRODUCT_ID_FORMAT = '{channel}:{contentLanguage}:{targetCountry}:{offerId}'
 
 def create_batch(
     batch_number: int, item_rows: List[bigquery.Row], method: constants.Method
-) -> Tuple[constants.BATCH, List[str], constants.BATCH_ID_TO_ITEM_ID]:
+) -> Tuple[constants.Batch, List[str], constants.BatchIdToItemId]:
   """Processes a list of items into a batch ready to submit to the API.
 
   batch_number refers to the entire batch of items and batch_id refers to a
@@ -85,7 +85,7 @@ def create_batch(
 
 def _convert_item_to_content_api_format(
     batch_number: int, item_row: Union[bigquery.Row,
-                                       constants.PRODUCT]) -> constants.PRODUCT:
+                                       constants.Product]) -> constants.Product:
   """Converts item to the format required by the API.
 
   Args:

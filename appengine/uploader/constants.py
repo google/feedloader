@@ -35,7 +35,7 @@ MC_SERVICE_ACCOUNT_FILE = 'mc_service_account.json'
 
 # Constants for Content API.
 SERVICE_NAME = 'content'
-SERVICE_VERSION = 'v2'
+CONTENT_API_VERSION = 'v2.1'
 SANDBOX_SERVICE_VERSION = 'v2sandbox'
 CONTENT_API_SCOPE = 'https://www.googleapis.com/auth/' + SERVICE_NAME
 CHANNEL = 'online'
@@ -51,13 +51,15 @@ TABLE_ID_FOR_RESULT_COUNTS_MONITORING = 'process_result'
 TABLE_ID_FOR_ITEM_RESULTS_MONITORING = 'item_results'
 
 # Constants for Shoptimizer API
-SHOPTIMIZER_BASE_URL = os.environ['SHOPTIMIZER_URL']
+SHOPTIMIZER_API_INTEGRATION_ON = util.strtobool(
+    os.environ['SHOPTIMIZER_API_INTEGRATION_ON'])
+SHOPTIMIZER_BASE_URL = os.environ.get('SHOPTIMIZER_URL', '')
 SHOPTIMIZER_ENDPOINT = f'{SHOPTIMIZER_BASE_URL}/shoptimizer/v1/batch/optimize'
 
 # Type aliases
-BATCH = Dict[str, Any]
-BATCH_ID_TO_ITEM_ID = Dict[int, Any]
-PRODUCT = Dict[str, Any]
+Batch = Dict[str, Any]
+BatchIdToItemId = Dict[int, Any]
+Product = Dict[str, Any]
 
 
 # Enums

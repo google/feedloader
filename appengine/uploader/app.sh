@@ -23,13 +23,14 @@ elif [[ $1 == 'test' ]]; then
   python -m test_runner
   rm "$CURRENT_DIRECTORY"/config/merchant_info.json
 elif [[ $1 = 'prod' ]]; then
-  if [[ "$#" -le 4 ]]; then
+  if [[ "$#" -le 5 ]]; then
     echo "Some arguments are missing."
   else
     sed -e "s/<PROJECT_ID>/$2/g" \
       -e "s/<IS_MCA>/$3/g" \
       -e "s/<MERCHANT_ID>/$4/g" \
-      -e "s;<SHOPTIMIZER_URL>;$5;g" \
+      -e "s/<SHOPTIMIZER_API_INTEGRATION_ON>/$5/g" \
+      -e "s;<SHOPTIMIZER_URL>;$6;g" \
       "$CURRENT_DIRECTORY"/app_template.yaml > "$CURRENT_DIRECTORY"/app.yaml
     gcloud beta app deploy "$CURRENT_DIRECTORY"/app.yaml \
       --project "$2" --quiet \

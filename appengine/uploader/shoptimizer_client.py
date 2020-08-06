@@ -46,7 +46,7 @@ class ShoptimizerClient(object):
     self._optimization_params = _load_optimization_params(
         self._batch_number, self._operation)
 
-  def shoptimize(self, batch: constants.BATCH) -> constants.BATCH:
+  def shoptimize(self, batch: constants.Batch) -> constants.Batch:
     """Optimizes a batch of product data by sending it to the Shoptimizer (optimization) API.
 
     Args:
@@ -78,7 +78,7 @@ class ShoptimizerClient(object):
 
     return response_dict.get('optimized-data', batch)
 
-  def _is_input_valid(self, batch: constants.BATCH) -> bool:
+  def _is_input_valid(self, batch: constants.Batch) -> bool:
     """Checks input parameters are valid.
 
     Args:

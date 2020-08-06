@@ -45,7 +45,7 @@ def initialize_api(config_path, service_account_file):
       http=http.set_user_agent(http.build_http(), constants.APPLICATION_NAME))
   service = discovery.build(
       constants.SERVICE_NAME,
-      constants.SERVICE_VERSION,
+      constants.CONTENT_API_VERSION,
       http=auth_http,
       cache_discovery=False)
   return service
