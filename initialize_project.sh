@@ -983,34 +983,34 @@ CreateTrigger() {
 }
 
 # Recreate the Cloud Build triggers by deleting them all first.
-EXISTING_TRIGGERS=$(gcloud alpha builds triggers list | grep "id:" | awk '{printf("%s\n", $2)}')
+EXISTING_TRIGGERS=$(gcloud alpha builds triggers list --filter=name:FeedLoader | grep "id:" | awk '{printf("%s\n", $2)}')
 for TRIGGER in $(echo "$EXISTING_TRIGGERS")
 do
   gcloud alpha builds triggers -q delete "$TRIGGER"
 done
 CreateTrigger deploy_functions_calculate_product_changes.yaml \
-  "Deploy Calculate Product Change Function" \
+  "FeedLoader Deploy Calculate Product Change Function" \
   _TIMEZONE_UTC_OFFSET="$TIMEZONE_UTC_OFFSET"::_EXPIRATION_THRESHOLD="$EXPIRATION_THRESHOLD"::_BQ_DATASET="$BQ_FEED_DATASET"::_DELETES_THRESHOLD="$DELETES_THRESHOLD"::_UPSERTS_THRESHOLD="$UPSERTS_THRESHOLD"::_UPDATE_BUCKET="$UPDATE_BUCKET"::_RETRIGGER_BUCKET="$RETRIGGER_BUCKET"::_FEED_BUCKET="$FEED_BUCKET"::_ARCHIVE_BUCKET="$ARCHIVE_BUCKET"::_COMPLETED_FILES_BUCKET="$COMPLETED_FILES_BUCKET"::_LOCK_BUCKET="$LOCK_BUCKET"
 CreateTrigger deploy_functions_import_file_into_bq.yaml \
-  "Deploy Feed Import Function" \
+  "FeedLoader Deploy Feed Import Function" \
   _BQ_DATASET="$BQ_FEED_DATASET"::_FILE_RANGE="$FILE_RANGE"::_COMPLETED_FILES_BUCKET="$COMPLETED_FILES_BUCKET"::_FEED_BUCKET="$FEED_BUCKET"::_UPDATE_BUCKET="$UPDATE_BUCKET"::_LOCK_BUCKET="$LOCK_BUCKET"
 CreateTrigger deploy_functions_retry_feed_import.yaml \
-  "Deploy Feed File Retry Function" \
+  "FeedLoader Deploy Feed File Retry Function" \
   _BQ_DATASET="$BQ_FEED_DATASET"::_FEED_BUCKET="$FEED_BUCKET"::_UPDATE_BUCKET="$UPDATE_BUCKET"::_COMPLETED_FILES_BUCKET="$COMPLETED_FILES_BUCKET"::_RETRIGGER_BUCKET="$RETRIGGER_BUCKET"
 CreateTrigger deploy_functions_trigger_dag.yaml \
-  "Deploy Trigger DAG Function" \
+  "FeedLoader Deploy Trigger DAG Function" \
   _GCP_PROJECT="$GCP_PROJECT"::_AIRFLOW_WEBSERVER_ID="$AIRFLOW_WEBSERVER_ID"::_DAG_ID="$DAG_ID"::_TRIGGER_COMPLETION_BUCKET="$TRIGGER_COMPLETION_BUCKET"::_REGION="$REGION"::_CLOUD_COMPOSER_ENV_NAME="$CLOUD_COMPOSER_ENV_NAME"
 CreateTrigger deploy_gae_initiator.yaml \
-  "Deploy AppEngine initiator" \
+  "FeedLoader Deploy AppEngine initiator" \
   _KEYRING="$KEYRING"::_KEYNAME="$KEYNAME"::_GCP_PROJECT="$GCP_PROJECT"::_REGION="$REGION"::_TRIGGER_COMPLETION_BUCKET="$TRIGGER_COMPLETION_BUCKET"::_LOCK_BUCKET="$LOCK_BUCKET"
 CreateTrigger deploy_monitor.yaml \
-  "Deploy Monitor Composer & Function" \
+  "FeedLoader Deploy Monitor Composer & Function" \
   _KEYRING="$KEYRING"::_KEYNAME="$KEYNAME"::_MAILER_SUBSCRIPTION="$MAILER_SUBSCRIPTION"::_GCP_PROJECT="$GCP_PROJECT"::_PUBSUB_TOKEN="$PUBSUB_TOKEN"::_CLOUD_COMPOSER_ENV_NAME="$CLOUD_COMPOSER_ENV_NAME"::_REGION="$REGION"::_FINISH_EMAILS="$FINISH_EMAILS"::_UPDATE_BUCKET="$UPDATE_BUCKET"
 CreateTrigger deploy_gae_build_reporter.yaml \
-  "Deploy build reporter AppEngine" \
+  "FeedLoader Deploy build reporter AppEngine" \
   _KEYRING="$KEYRING"::_KEYNAME="$KEYNAME"::_CLOUD_BUILD_SUBSCRIPTION="$CLOUD_BUILD_SUBSCRIPTION"::_GCP_PROJECT="$GCP_PROJECT"::_BUILD_NOTIFICATION_EMAILS="$BUILD_NOTIFICATION_EMAILS"
 CreateTrigger deploy_gae_uploader.yaml \
-  "Deploy AppEngine uploader" \
+  "FeedLoader Deploy AppEngine uploader" \
   _KEYRING="$KEYRING"::_KEYNAME="$KEYNAME"::_GCP_PROJECT="$GCP_PROJECT"::_MERCHANT_ID="$MERCHANT_ID"::_IS_MCA="$IS_MCA"::_SHOPTIMIZER_URL="$SHOPTIMIZER_URL"::_SHOPTIMIZER_API_INTEGRATION_ON="$SHOPTIMIZER_API_INTEGRATION_ON"
 # Encrypt Keys
 print_green "Generating encrypted versions of the service accounts so that Cloud Build can deploy stuff securely..."
