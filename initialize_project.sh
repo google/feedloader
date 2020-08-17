@@ -293,6 +293,9 @@ fi
 print_green "Setting up AppEngine..."
 if ! gcloud app describe &> /dev/null; then
 gcloud app create --region="$APP_ENGINE_REGION"
+git clone https://github.com/GoogleCloudPlatform/python-docs-samples
+gcloud app deploy python-docs-samples/appengine/standard_python3/hello_world --project "$GCP_PROJECT" --quiet
+rm -rf ./python-docs-samples
 fi
 
 # Set up AppEngine service account
