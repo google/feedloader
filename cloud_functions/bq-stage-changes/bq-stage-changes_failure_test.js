@@ -64,6 +64,7 @@ let updateBucketStub_Success;
 let updatesInsertJobResult;
 
 ava.before((t) => {
+  process.env.ARCHIVE_BUCKET = 'testarchivebucket';
   process.env.BQ_DATASET = 'testdataset';
   process.env.COMPLETED_FILES_BUCKET = 'testcompletedbucket';
   process.env.FEED_BUCKET = 'testfeedbucket';
@@ -1370,7 +1371,7 @@ ava('calculateProductChanges: should log error if ' +
         {
           id: 2,
           promise: jobPromiseStub_Success,
-          getMetadata: getMetadataStub_Default
+          getMetadata: getMetadataStub_Delete
         },
       ];
       const bigQueryConstructor = sinonHelpers.getStubConstructor(BigQuery);
@@ -1399,8 +1400,8 @@ ava('calculateProductChanges: should log error if ' +
           t.context.data, t.context.context);
 
       // Assert.
-      t.true(
-          consoleError.calledWith(sinon.match('QueryJob Error for Job ID 2')));
+      t.true(consoleError.calledWith(
+          sinon.match('createQueryJob Error for Job ID 2')));
     });
 
 ava('calculateProductChanges: should log error if ' +

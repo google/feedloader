@@ -54,6 +54,7 @@ let streamingInsertJobResult;
 let updatesInsertJobResult;
 
 ava.before((t) => {
+  process.env.ARCHIVE_BUCKET = 'testarchivebucket';
   process.env.BQ_DATASET = 'testdataset';
   process.env.COMPLETED_FILES_BUCKET = 'testcompletedbucket';
   process.env.FEED_BUCKET = 'testfeedbucket';
@@ -580,7 +581,7 @@ ava('calculateProductChanges: should move files correctly while archiving.',
       t.true(consoleLog.calledWith('Finished archiving.'));
     });
 
-ava('calculateProductChanges: should set items table expiration date.',
+ava('calculateProductChanges: should set items table expiration date',
     async (t) => {
       // Arrange.
       const bigQueryConstructor = sinonHelpers.getStubConstructor(BigQuery);
@@ -752,8 +753,8 @@ ava('calculateProductChanges: should log success after metadata check',
           t.context.data, t.context.context);
 
       // Assert.
-      t.true(consoleLog.calledWith(
-          'Insert into streaming_items table job 1 completed.'));
+      t.true(consoleLog.calledWith(sinon.match(
+          'createQueryJob into streaming_items table job 1 completed.')));
     });
 
 ava('calculateProductChanges: should call CALCULATE_ITEMS_FOR_DELETION_QUERY ' +
@@ -903,8 +904,8 @@ ava('calculateProductChanges: CALCULATE_ITEMS_FOR_UPDATE_QUERY query job ' +
       // Assert.
       t.true(bigQueryConstructor.getInstance().createQueryJob.calledWith(
           t.context.updatesQueryJobObject));
-      t.true(consoleLog.calledWith(
-          'Insert into items_to_upsert table job 3 completed.'));
+      t.true(consoleLog.calledWith(sinon.match(
+          'createQueryJob into items_to_upsert table job 3 completed.')));
     });
 
 ava('calculateProductChanges: CALCULATE_ITEMS_FOR_INSERTION_QUERY should ' +
@@ -939,8 +940,8 @@ ava('calculateProductChanges: CALCULATE_ITEMS_FOR_INSERTION_QUERY should ' +
       // Assert.
       t.true(bigQueryConstructor.getInstance().createQueryJob.calledWith(
           t.context.insertsQueryJobObject));
-      t.true(consoleLog.calledWith(
-          'Insert into items_to_upsert table job 4 completed.'));
+      t.true(consoleLog.calledWith(sinon.match(
+        'createQueryJob into items_to_upsert table job 4 completed.')));
     });
 
 ava('calculateProductChanges: should call the COUNT_UPSERTS_QUERY after the ' +
@@ -1177,8 +1178,8 @@ ava('calculateProductChanges: GET_EXPIRING_ITEMS_QUERY should ' +
       // Assert.
       t.true(bigQueryConstructor.getInstance().createQueryJob.calledWith(
           t.context.expiringItemsQueryJobObject));
-      t.true(consoleLog.calledWith(
-          'Insert into items_to_prevent_expiring table job 5 completed.'));
+      t.true(consoleLog.calledWith(sinon.match(
+        'createQueryJob into items_to_prevent_expiring table job 5 completed.')));
     });
 
 ava('calculateProductChanges: should call the COUNT_EXPIRING_QUERY after the ' +
@@ -1306,6 +1307,38 @@ ava('ensureAllFilesWereImported: should detect difference in storage ' +
       // Assert.
       t.true(consoleLog.calledWith(
           '1 files are missing. Inserted Retry Trigger.'));
+    });
+
+ava('calculateProductChanges: should skip item table deletion on completion',
+    async (t) => {
+      // Arrange.
+      const bigQueryConstructor = sinonHelpers.getStubConstructor(BigQuery);
+      const tasksConstructor =
+          sinonHelpers.getStubConstructor(CloudTasksClient);
+      const bigQueryStub = bigQueryConstructor.withInit((instance) => {
+        setupBigQueryInstanceStubs(instance, t);
+      });
+      const tasksStub = tasksConstructor.withInit((instance) => {
+        instance.queuePath =
+            sinon.stub()
+                .withArgs(
+                    sinon.match.string, sinon.match.string, sinon.match.string)
+                .returns({});
+        instance.createTask = t.context.createTaskStub_Success;
+      });
+      const calculateProductChanges = proxyquire('./index', {
+        '@google-cloud/bigquery': {BigQuery: bigQueryStub},
+        '@google-cloud/storage': {Storage: t.context.storageStub_Success},
+        '@google-cloud/tasks': {CloudTasksClient: tasksStub},
+        './config.json': t.context.validConfig,
+      });
+
+      // Act.
+      await calculateProductChanges.calculateProductChanges(
+          t.context.data, t.context.context);
+
+      // Assert.
+      t.false(bqTableDeleteStub_Success.called);
     });
 
 /**

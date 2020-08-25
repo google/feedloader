@@ -135,7 +135,7 @@ exports.calculateProductChanges = async (fileReference, eventMetadata) => {
   // Archive the feed files that were already loaded by moving them to a
   // timestamped subfolder in the Cloud Storage bucket.
   if (!await archiveFolder(storage)) {
-    await cleanup(dataset, storage);
+    await cleanUp(dataset, storage);
     return;
   }
 
@@ -155,7 +155,7 @@ exports.calculateProductChanges = async (fileReference, eventMetadata) => {
 
   if (tableExistenceResults.includes(false)) {
     console.error('One or more required tables do not exist. Aborting...');
-    await cleanup(dataset, storage);
+    await cleanUp(dataset, storage);
     return;
   }
 
@@ -166,7 +166,7 @@ exports.calculateProductChanges = async (fileReference, eventMetadata) => {
   if (!configExists || !Array.isArray(config.mapping)) {
     console.error(
         'Unable to map any columns from the schema config. Aborting...');
-    await cleanup(dataset, storage);
+    await cleanUp(dataset, storage);
     return;
   }
   const filteredConfigEntries = config.mapping.filter((x) => !!x.bqColumn);
@@ -178,7 +178,7 @@ exports.calculateProductChanges = async (fileReference, eventMetadata) => {
   if (!columnsToHash) {
     console.error(
         'Unable to map any columns from the schema config. Aborting...');
-    await cleanup(dataset, storage);
+    await cleanUp(dataset, storage);
     return;
   }
   let merchantIdColumn = '';
@@ -297,10 +297,11 @@ exports.calculateProductChanges = async (fileReference, eventMetadata) => {
   const createTaskResult = await createTask(
       process.env.GCP_PROJECT, 'trigger-initiator', 'us-central1', taskPayload);
   if (!createTaskResult) {
-    await cleanup(dataset, storage);
+    await cleanUp(dataset, storage);
     await runDmlJob(bigQuery, queries.DELETE_LATEST_STREAMING_ITEMS);
     return;
   }
+  await cleanUp(dataset, storage, false);
 };
 
 /**
@@ -517,7 +518,7 @@ async function ensureAllFilesWereImported(dataset, storage) {
 
   if (!attemptedFiles || attemptedFiles.length === 0) {
     console.error('attemptedFiles retrieval failed.');
-    await cleanup(dataset, storage);
+    await cleanUp(dataset, storage);
     return false;
   }
 
@@ -526,7 +527,7 @@ async function ensureAllFilesWereImported(dataset, storage) {
 
   if (!importedFiles) {
     console.error('importedFiles retrieval failed.');
-    await cleanup(dataset, storage);
+    await cleanUp(dataset, storage);
     return false;
   }
 
@@ -555,7 +556,7 @@ async function ensureAllFilesWereImported(dataset, storage) {
     return false;
   }
 
-  return await cleanupCompletedFilenames(storage);
+  return await cleanUpCompletedFilenames(storage);
 }
 
 /**
@@ -564,11 +565,11 @@ async function ensureAllFilesWereImported(dataset, storage) {
  * @param {!Storage} storage The GCP Storage API object.
  * @return {boolean} True if files were removed successfully, otherwise false.
  */
-async function cleanupCompletedFilenames(storage) {
+async function cleanUpCompletedFilenames(storage) {
   // All data was verified to have been imported into BigQuery, so the
   // completed filenames should be cleaned from the bucket before the next run.
   console.log('Removing temp feed filenames from GCS...');
-  let cleanupCompletedBucketSuccess = true;
+  let cleanUpCompletedBucketSuccess = true;
   storage.bucket(process.env.COMPLETED_FILES_BUCKET)
       .deleteFiles({force: true}, (errors) => {
         if (errors && errors.length > 0) {
@@ -576,13 +577,13 @@ async function cleanupCompletedFilenames(storage) {
               'One or more errors occurred when deleting from the ' +
                   'completed filenames bucket.',
               errors);
-          cleanupCompletedBucketSuccess = false;
+          cleanUpCompletedBucketSuccess = false;
         }
       });
   console.log(
       'Finished deleting completed filenames from ' +
       `${process.env.COMPLETED_FILES_BUCKET}.`);
-  return cleanupCompletedBucketSuccess;
+  return cleanUpCompletedBucketSuccess;
 }
 /**
  * Renames current feeds to subfolder with timestamp for archival purposes.
@@ -677,8 +678,10 @@ async function createTask(project, queueName, location, payload) {
  * Cleans up the state of the run (items table and EOF) upon error cases.
  * @param {!Dataset} dataset The BigQuery Dataset class instance.
  * @param {!Storage} storage The Cloud Storage class instance.
+ * @param {boolean=} cleanItemsTable Whether or not to delete the items table.
  */
-async function cleanup(dataset, storage) {
+async function cleanUp(dataset, storage, cleanItemsTable = true) {
+  console.log('Starting cleanUp of lock file...');
   const eofLockBucket = storage.bucket(process.env.LOCK_BUCKET);
   const eofLockFile = eofLockBucket.file(LOCK_FILE_NAME);
   const [eofLockExists] = await eofLockFile.exists();
@@ -695,16 +698,18 @@ async function cleanup(dataset, storage) {
     }
     console.log(`${LOCK_FILE_NAME} was deleted successfully.`);
   }
-
-  dataset.table('items')
-      .delete()
-      .then((apiResponse) => {
-        console.log(
-            'Items table was deleted successfully. Response: ', apiResponse);
-      })
-      .catch((error) => {
-        console.error('Items table could not be deleted.', error);
-      });
+  if (cleanItemsTable) {
+    console.log('Attempting to delete items table...');
+    dataset.table('items')
+        .delete()
+        .then((apiResponse) => {
+          console.log(
+              'Items table was deleted successfully. Response: ', apiResponse);
+        })
+        .catch((error) => {
+          console.error('Items table could not be deleted.', error);
+        });
+  }
 }
 
 /**
@@ -713,7 +718,7 @@ async function cleanup(dataset, storage) {
  *
  * @param {!Dataset} dataset The BigQuery Dataset class instance.
  * @param {string} tableName The name of the table to set the expiration on.
- * @param {!integer} durationInMs The length of time in milliseconds before the
+ * @param {number} durationInMs The length of time in milliseconds before the
  * table expires.
  */
 function setTableExpirationDate(dataset, tableName, durationInMs) {
