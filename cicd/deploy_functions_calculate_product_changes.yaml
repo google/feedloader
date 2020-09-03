@@ -17,6 +17,6 @@ steps:
   entrypoint: '/bin/bash'
   args: ['-c', 'cp feed_schema_config.json cloud_functions/bq-stage-changes/config.json']
 - name: 'gcr.io/cloud-builders/gcloud'
-  args: ['functions', 'deploy', 'calculateProductChanges', '--memory', '512MB', '--timeout', '540s', '--set-env-vars', 'TIMEZONE_UTC_OFFSET=${_TIMEZONE_UTC_OFFSET},EXPIRATION_THRESHOLD=${_EXPIRATION_THRESHOLD},BQ_DATASET=${_BQ_DATASET},DELETES_THRESHOLD=${_DELETES_THRESHOLD},UPSERTS_THRESHOLD=${_UPSERTS_THRESHOLD},UPDATE_BUCKET=${_UPDATE_BUCKET},RETRIGGER_BUCKET=${_RETRIGGER_BUCKET},FEED_BUCKET=${_FEED_BUCKET},COMPLETED_FILES_BUCKET=${_COMPLETED_FILES_BUCKET},ARCHIVE_BUCKET=${_ARCHIVE_BUCKET},LOCK_BUCKET=${_LOCK_BUCKET}', '--trigger-resource', '${_UPDATE_BUCKET}', '--trigger-event', 'google.storage.object.finalize', '--runtime', 'nodejs8']
+  args: ['functions', 'deploy', 'calculateProductChanges', '--memory', '512MB', '--timeout', '540s', '--set-env-vars', 'GCP_PROJECT=${_GCP_PROJECT},TIMEZONE_UTC_OFFSET=${_TIMEZONE_UTC_OFFSET},EXPIRATION_THRESHOLD=${_EXPIRATION_THRESHOLD},BQ_DATASET=${_BQ_DATASET},DELETES_THRESHOLD=${_DELETES_THRESHOLD},UPSERTS_THRESHOLD=${_UPSERTS_THRESHOLD},UPDATE_BUCKET=${_UPDATE_BUCKET},RETRIGGER_BUCKET=${_RETRIGGER_BUCKET},FEED_BUCKET=${_FEED_BUCKET},COMPLETED_FILES_BUCKET=${_COMPLETED_FILES_BUCKET},ARCHIVE_BUCKET=${_ARCHIVE_BUCKET},LOCK_BUCKET=${_LOCK_BUCKET}', '--trigger-resource', '${_UPDATE_BUCKET}', '--trigger-event', 'google.storage.object.finalize', '--runtime', 'nodejs10']
   dir: 'cloud_functions/bq-stage-changes'
 timeout: 3600s
