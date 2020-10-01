@@ -107,7 +107,7 @@ for most use cases of Feedloader.
         `google_merchant_id` for these IDs:
 
         `{"csvHeader": "google_merchant_id", "bqColumn": "google_merchant_id",
-        "columnType": "INTEGER"}`
+        "columnType": "STRING"}`
 
 -   Edit the env.sh file in the repository root directory and supply values for
     all of the variables.
