@@ -5,3 +5,4 @@
 /composer/completion_monitor/config/service_account.json
 /cc_service_account.json
 /appengine/**/*Pipfile*
+/**/*venv
