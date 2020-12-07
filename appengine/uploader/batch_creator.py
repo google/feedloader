@@ -103,7 +103,7 @@ def _convert_item_to_content_api_format(
       continue
     try:
       new_key, new_value = _convert_feed_field_to_api_field(key, value)
-      if _has_valid_value(new_value):
+      if _has_valid_value(new_key, new_value):
         api_formatted_item[new_key] = new_value
     except ValueError as e:
       logging.debug('Error parsing batch #%d item %s: %s', batch_number,
@@ -183,7 +183,7 @@ def _strip_unwanted_chars(price: Union[int, str]) -> str:
   return ''.join(char for char in str(price) if char in string.digits)
 
 
-def _has_valid_value(value: Any) -> bool:
+def _has_valid_value(key: str, value: Any) -> bool:
   """Checks if the field has a usable value.
 
   A field should be ignored when the value has no actual data (e.g. numeric 0 is
@@ -191,13 +191,22 @@ def _has_valid_value(value: Any) -> bool:
 
   This method returns False if the given value is either of None, '', [] or {}.
   If the value is 0, False, or other values then it returns True.
+  If the key is either "price" or "salePrice" and the dictionary values for
+  "value" or "currency" are empty, it returns False.
 
   Args:
+    key: The key of the given field.
     value: The value of given field.
 
   Returns:
     Whether the field should be ignored or not.
   """
+  if key in ('price', 'salePrice'):
+    if isinstance(value, dict) and value.get('currency') and value.get('value'):
+      return True
+    else:
+      return False
+
   if value:
     return True
   elif isinstance(value, numbers.Number) or isinstance(value, bool):

@@ -136,6 +136,19 @@ class BatchCreatorTest(unittest.TestCase):
 
     self.assertEqual(expected_api_formatted_item, api_formatted_item)
 
+  @parameterized.expand([('price', None, 'price'),
+                         ('sale_price', None, 'salePrice'),
+                         ('title', None, 'title')])
+  def test_convert_item_to_content_api_format_removes_a_field_when_its_value_is_invalid(
+      self, original_field_name, original_field_value, formatted_field_name):
+    batch_id = 0
+    item = {original_field_name: original_field_value}
+
+    api_formatted_item = batch_creator._convert_item_to_content_api_format(
+        batch_id, item)
+
+    self.assertNotIn(formatted_field_name, api_formatted_item)
+
   @parameterized.expand([
       (True, test_utils.SINGLE_ITEM_COUNT),
       (True, test_utils.MULTIPLE_ITEM_COUNT),
