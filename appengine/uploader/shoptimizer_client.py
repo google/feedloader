@@ -45,6 +45,7 @@ class ShoptimizerClient(object):
     self._operation = operation
     self._optimization_params = _load_optimization_params(
         self._batch_number, self._operation)
+    self._config_params = _load_config_params()
 
   def shoptimize(self, batch: constants.Batch) -> constants.Batch:
     """Optimizes a batch of product data by sending it to the Shoptimizer (optimization) API.
@@ -144,12 +145,15 @@ class ShoptimizerClient(object):
           'Authorization': f'bearer {jwt}',
           'Content-Type': 'application/json'
       }
+      request_params = {}
+      request_params.update(self._optimization_params)
+      request_params.update(self._config_params)
       response = requests.request(
           'POST',
           constants.SHOPTIMIZER_ENDPOINT,
           data=batch_as_json,
           headers=headers,
-          params=self._optimization_params)
+          params=request_params)
       response.raise_for_status()
       response_dict = json.loads(response.text)
     except requests.exceptions.RequestException as request_exception:
@@ -258,3 +262,22 @@ def _load_optimization_params(batch_number: int,
     raise
 
   return optimization_params
+
+
+def _load_config_params() -> Dict[str, str]:
+  """Loads configuration parameters for the Shoptimizer API.
+
+  The configuration parameters include attributes listed below:
+  - lang: The code of the language.
+  - country: The code of the country.
+  - currency: The code of the currency.
+
+  Returns:
+    The configuration parameters for the Shoptimizer API.
+  """
+  config_params = {
+      'lang': constants.CONTENT_LANGUAGE,
+      'country': constants.TARGET_COUNTRY,
+      'currency': constants.TARGET_CURRENCY,
+  }
+  return config_params

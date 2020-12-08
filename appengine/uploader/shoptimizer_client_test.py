@@ -131,6 +131,20 @@ class ShoptimizerClientTest(unittest.TestCase):
       self.assertNotIn('mpn', optimized_product)
       self.assertNotEqual(original_batch, optimized_batch)
 
+  def test_request_includes_configuration_parameters(self, mocked_requests):
+    _, original_batch, _, _ = test_utils.generate_test_data(METHOD)
+    mocked_requests.request.return_value = _create_mock_response(
+        200, SHOPTIMIZER_API_RESPONSE_SUCCESS)
+
+    with mock.patch(
+        'shoptimizer_client.ShoptimizerClient._get_jwt',
+        return_value='jwt data'):
+      self.client.shoptimize(original_batch)
+
+      self.assertIn('lang', mocked_requests.request.call_args[1]['params'])
+      self.assertIn('country', mocked_requests.request.call_args[1]['params'])
+      self.assertIn('currency', mocked_requests.request.call_args[1]['params'])
+
   def test_config_file_not_found_does_not_call_api_and_returns_original_batch(
       self, mocked_requests):
     _, original_batch, _, _ = test_utils.generate_test_data(METHOD)
