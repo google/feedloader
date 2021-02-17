@@ -14,7 +14,20 @@ accept all risks, known and unknown, associated with its usage, including with
 respect to your deployment of any portion of this solution in your systems, or
 usage in connection with your business, if at all._
 
-[TOC]
+-   [FeedLoader](#feedloader)
+    *   [Introduction](#introduction)
+    +   [What does it do?](#what-does-it-do-)
+    +   [Who is it for?](#who-is-it-for-)
+    +   [What does it cost?](#what-does-it-cost-)
+    *   [Prerequisites](#prerequisites)
+    *   [Configuration](#configuration)
+    *   [Installation](#installation)
+    *   [Usage](#usage)
+    *   [Optimizations](#optimizations)
+    *   [Testing](#testing)
+    +   [Unit Tests](#unit-tests)
+    +   [End-To-End Tests](#end-to-end-tests)
+    *   [Syncing your deployment with future Feedloader releases](#syncing-your-deployment-with-future-feedloader-releases)
 
 ## Introduction
 
@@ -256,8 +269,9 @@ that they can be run again and again.
 ## Syncing your deployment with future Feedloader releases
 
 This repository may be updated with new releases. To get the newly released code
-deployed to your GCP environment, simply perform a git pull from this
-repository, then a git add, commit, and push into your Cloud Source Repository.
+deployed to your GCP environment, either perform a git pull from this
+repository, or overwrite your local repository with one of the tagged releases.
+Then perform a git add, commit, and push into your Cloud Source Repository.
 Refer to the diagram below for an overview.
 
 If infrastructure or environment changes are required (i.e. not solely
