@@ -13,5 +13,6 @@
   "shopping-exclusion-optimizer": "True",
   "size-length-optimizer": "True",
   "title-length-optimizer": "True",
-  "title-optimizer": "True"
+  "title-optimizer": "True",
+  "title-word-order-optimizer" : "True"
 }
