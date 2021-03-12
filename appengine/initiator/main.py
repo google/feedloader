@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# python3
 """Initiator module that sends jobs to Task Queue when triggered.
 
 This module provides a handler to which Cloud Pub/Sub will push a message after

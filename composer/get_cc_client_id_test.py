@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# python3
 """Tests for google3.corp.gtech.ads.shopping_feed_optimizer.get_cc_client_id."""
 import io
 import unittest

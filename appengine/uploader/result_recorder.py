@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# python3
 """Record the number of items for each request to BigQuery."""
 
 from typing import Any, Dict, List, Sequence

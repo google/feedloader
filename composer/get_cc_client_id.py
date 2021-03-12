@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# python3
 """Get the client ID associated with a Cloud Composer environment."""
 
 

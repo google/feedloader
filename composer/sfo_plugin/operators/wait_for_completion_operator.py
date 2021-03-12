@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# python3
 """Airflow operator waiting for the process completion by checking if the Cloud Tasks queue is empty."""
 
 import logging

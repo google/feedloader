@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# python3
 """Client to send product data to the Shoptimizer (optimization) API and parse the results."""
 
 import json

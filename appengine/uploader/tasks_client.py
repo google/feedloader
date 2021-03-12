@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# python3
 """This module includes components that handle Google Cloud Tasks."""
 
 from google.cloud import tasks

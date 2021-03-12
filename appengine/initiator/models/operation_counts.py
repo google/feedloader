@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# python3
 """Stores the counts for a certain operation (upsert/delete/expiring) during a run of SFO."""
 
 import dataclasses

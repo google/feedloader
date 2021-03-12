@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# python3
 """Adds products to the specified GMC account via the Google Shopping API.
 
   Typical usage example:

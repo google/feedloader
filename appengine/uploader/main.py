@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# python3
 """Uploader module that handles batch jobs sent from Task Queue.
 
 This module receives batch jobs from TaskQueue. For each job, the module loads

@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# python3
 """Airflow operator to read process result from BigQuery and send it to Cloud Pub/Sub to trigger reporting."""
 
 import json

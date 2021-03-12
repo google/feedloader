@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# python3
 """Creates a batch of product data to send to Content API for Shopping."""
 
 import logging
