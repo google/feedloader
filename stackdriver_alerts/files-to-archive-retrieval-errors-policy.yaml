@@ -20,7 +20,7 @@ conditions:
       perSeriesAligner: ALIGN_RATE
     comparison: COMPARISON_GT
     duration: 0s
-    filter: metric.type="logging.googleapis.com/user/RetriveFeedsToArchiveErrors" AND resource.type="cloud_function"
+    filter: metric.type="logging.googleapis.com/user/RetrieveFeedsToArchiveErrors" AND resource.type="cloud_function"
     trigger:
       count: 1
   displayName: Metric Threshold on Log Metrics
