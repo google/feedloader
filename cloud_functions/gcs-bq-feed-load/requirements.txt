@@ -1,0 +1,4 @@
+google-cloud-bigquery>=2.18.0
+google-cloud-storage>=1.38.0
+iso8601
+pytz>=2021.1
