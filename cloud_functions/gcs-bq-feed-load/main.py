@@ -15,16 +15,18 @@
 
 """Cloud Function that triggers on GCS bucket upload to import data into BQ."""
 import datetime
+import json
 import logging
 import os
-from typing import Any, Dict
+from typing import Any, Collection, Dict
 
+from google.api_core import exceptions
 from google.cloud import bigquery
-from google.cloud import exceptions
 from google.cloud import storage
 
 import iso8601
 import pytz
+import schema
 
 # Set the default expiration of this Cloud Function to 9 minutes.
 _EVENT_MAX_AGE_SECONDS = 540
@@ -62,6 +64,14 @@ def import_storage_file_into_big_query(
         exceptions.NotFound('Update Bucket Environment Variable not found.'))
     return
 
+  schema_config_contents = open('config.json').read()
+  schema_config = json.loads(schema_config_contents)
+  if not _schema_config_valid(schema_config):
+    logging.error(
+        exceptions.BadRequest(f'Schema is invalid: {schema_config_contents} .'))
+    return
+  items_table_bq_schema = _parse_schema_config(schema_config)
+
   storage_client = storage.Client()
 
   try:
@@ -85,7 +95,8 @@ def import_storage_file_into_big_query(
 
   # Cloud Functions executes before the file is visible in GCS, so check first.
   if _file_to_import_exists(storage_client, event['bucket'], event['name']):
-    _perform_big_query_load(event['bucket'], event['name'])
+    _perform_big_query_load(event['bucket'], event['name'],
+                            items_table_bq_schema)
   else:
     # Need to wait until the file is found, so raise to trigger an auto-retry.
     raise RuntimeError((
@@ -133,9 +144,24 @@ def _get_current_time_in_utc() -> datetime.datetime:
   return datetime.datetime.now(pytz.utc)
 
 
-def _perform_big_query_load(bucket_name: str, file_name: str) -> None:
-  """Helper function that handles the loading of the GCS file data into BQ."""
+def _perform_big_query_load(
+    bucket_name: str, file_name: str,
+    items_table_bq_schema: Collection[bigquery.SchemaField]) -> None:
+  """Helper function that handles the loading of the GCS file data into BQ.
 
+  Args:
+      bucket_name: The name of the Cloud Storage bucket to find the file in.
+      file_name: The name of the file in the bucket to convert to a BQ table.
+      items_table_bq_schema: The BigQuery schema as defined in
+        https://googleapis.dev/python/bigquery/latest/generated/google.cloud.bigquery.job.LoadJobConfig.html#google.cloud.bigquery.job.LoadJobConfig.schema
+
+  Raises:
+    GoogleAPICallError: The BigQuery job failed to finish.
+    TimeoutError: The job did not complete within the maximum allowed time.
+
+  Returns:
+      None; the output is written to Cloud logging.
+  """
   big_query_client = bigquery.Client()
 
   big_query_job_config = bigquery.LoadJobConfig(
@@ -144,6 +170,7 @@ def _perform_big_query_load(bucket_name: str, file_name: str) -> None:
       encoding='UTF-8',
       field_delimiter='\t',
       quote_character='',
+      schema=items_table_bq_schema,
       skip_leading_rows=1,
       source_format=bigquery.SourceFormat.CSV,
       time_partitioning=bigquery.table.TimePartitioning(
@@ -156,8 +183,38 @@ def _perform_big_query_load(bucket_name: str, file_name: str) -> None:
   big_query_load_job = big_query_client.load_table_from_uri(
       gcs_uri, feed_table_path, job_config=big_query_job_config)
 
-  big_query_load_job.result()  # Waits for the job to complete.
+  try:
+    big_query_load_job.result()  # Waits for the job to complete.
+  except (exceptions.GoogleAPICallError, TimeoutError) as error:
+    logging.error(
+        RuntimeError(
+            f'BigQuery load job {big_query_load_job.job_id} failed to finish. '
+            f'Error details: {error}'))
 
   destination_table = big_query_client.get_table(feed_table_path)
   print('Loaded {} rows to table {}'.format(destination_table.num_rows,
                                             feed_table_path))
+
+
+def _schema_config_valid(schema_config: Dict[str, Any]) -> bool:
+  """Helper method that returns True if the config is in the correct format."""
+  if not isinstance(schema_config.get('mapping'), list):
+    return False
+
+  items_table_schema = schema.Schema([{
+      'csvHeader': str,
+      'bqColumn': str,
+      'columnType': str
+  }])
+
+  return items_table_schema.is_valid(schema_config.get('mapping'))
+
+
+def _parse_schema_config(
+    schema_config: Dict[str, Any]) -> Collection[bigquery.SchemaField]:
+  """Transforms the items table schema config file into a BQ-loadable object."""
+  bq_schema = [
+      bigquery.SchemaField(column.get('bqColumn'), column.get('columnType'))
+      for column in schema_config.get('mapping')
+  ]
+  return bq_schema
