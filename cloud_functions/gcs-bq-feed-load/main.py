@@ -35,7 +35,7 @@ _ITEMS_TABLE_EXPIRATION_DURATION_MS = 43200000
 
 def import_storage_file_into_big_query(
     event: Dict[str, Any], context: 'google.cloud.functions.Context') -> None:
-  """Background Cloud Function triggered by GCS bucket upload.
+  """Cloud Function ("CF") triggered by a Cloud Storage ("GCS") bucket upload.
 
      This function converts the uploaded GCS file data into a BigQuery table.
 
@@ -93,15 +93,17 @@ def import_storage_file_into_big_query(
                       'force remove the EOF file from the bucket.')))
     return
 
-  # Cloud Functions executes before the file is visible in GCS, so check first.
+  # This CF might execute before the file is visible in GCS, so check first.
   if _file_to_import_exists(storage_client, event['bucket'], event['name']):
     _perform_big_query_load(event['bucket'], event['name'],
                             items_table_bq_schema)
   else:
     # Need to wait until the file is found, so raise to trigger an auto-retry.
-    raise RuntimeError((
-        f"GCS File {event['bucket']}/{event['name']} not detected in GCS yet. '"
-        f'Retrying...'))
+    raise RuntimeError(
+        (f"GCS File {event['bucket']}/{event['name']} not detected in GCS yet. "
+         f'Retrying...'))
+
+  _save_imported_filename_to_gcs(storage_client, event)
 
 
 def _file_to_import_exists(storage_client: storage.client.Client,
@@ -194,6 +196,22 @@ def _perform_big_query_load(
   destination_table = big_query_client.get_table(feed_table_path)
   print('Loaded {} rows to table {}'.format(destination_table.num_rows,
                                             feed_table_path))
+
+
+def _save_imported_filename_to_gcs(storage_client: storage.client.Client,
+                                   event: Dict[str, Any]) -> None:
+  """Helper function that records the imported file's name to a GCS bucket."""
+  print('Starting insert of import history record...')
+
+  completed_files_bucket_name = os.environ.get(
+      'COMPLETED_FILES_BUCKET').replace('gs://', '')
+  completed_files_bucket = storage_client.get_bucket(
+      completed_files_bucket_name)
+
+  completed_files_bucket.blob(event['name']).upload_from_string('')
+
+  print(f"Imported filename: {event['name']} was saved into GCS bucket: "
+        f'{completed_files_bucket_name} to confirm the upload succeeded.')
 
 
 def _schema_config_valid(schema_config: Dict[str, Any]) -> bool:
