@@ -406,8 +406,8 @@ then
   gcloud logging metrics -q delete $IMPORT_STORAGE_FILE_ERRORS
 fi
 gcloud logging metrics create "$IMPORT_STORAGE_FILE_ERRORS" \
-  --description="Count of the importStorageFileInfoBigQuery Cloud Function Errors" \
-  --log-filter="resource.type=\"cloud_function\" resource.labels.function_name=\"importStorageFileInfoBigQuery\" severity>=ERROR" \
+  --description="Count of the import_storage_file_into_big_query Cloud Function Errors" \
+  --log-filter="resource.type=\"cloud_function\" resource.labels.function_name=\"import_storage_file_into_big_query\" severity>=ERROR" \
   && echo "Metric $IMPORT_STORAGE_FILE_ERRORS has been successfully created."
 
 BQ_LOAD_SUCCESSES=BQLoadSuccesses
@@ -417,8 +417,8 @@ then
   gcloud logging metrics -q delete $BQ_LOAD_SUCCESSES
 fi
 gcloud logging metrics create "$BQ_LOAD_SUCCESSES" \
-  --description="Count of the importStorageFileInfoBigQuery Cloud Function Successes" \
-  --log-filter="resource.type=\"cloud_function\" resource.labels.function_name=\"importStorageFileIntoBigQuery\" \"successfully\"" \
+  --description="Count of the import_storage_file_into_big_query Cloud Function Successes" \
+  --log-filter="resource.type=\"cloud_function\" resource.labels.function_name=\"import_storage_file_into_big_query\" \"rows to table\"" \
   && echo "Metric $BQ_LOAD_SUCCESSES has been successfully created."
 
 IMPORT_FUNCTION_TIMEOUT_ERRORS=ImportFunctionTimeouts
@@ -428,31 +428,9 @@ then
   gcloud logging metrics -q delete $IMPORT_FUNCTION_TIMEOUT_ERRORS
 fi
 gcloud logging metrics create "$IMPORT_FUNCTION_TIMEOUT_ERRORS" \
-  --description="Count of the errors when importStorageFileInfoBigQuery function times out." \
-  --log-filter="resource.type=\"cloud_function\" resource.labels.function_name=\"importStorageFileIntoBigQuery\" \"Dropping event\"" \
+  --description="Count of the errors when import_storage_file_into_big_query function times out." \
+  --log-filter="resource.type=\"cloud_function\" resource.labels.function_name=\"import_storage_file_into_big_query\" \"Dropping event\"" \
   && echo "Metric $IMPORT_FUNCTION_TIMEOUT_ERRORS has been successfully created."
-
-INVALID_FILE_RANGE_ERRORS=InvalidFileRangeErrors
-if echo "$EXISTING_METRICS" | grep -q -w "$INVALID_FILE_RANGE_ERRORS"
-then
-  echo "Metric $INVALID_FILE_RANGE_ERRORS already exists."
-  gcloud logging metrics -q delete $INVALID_FILE_RANGE_ERRORS
-fi
-gcloud logging metrics create "$INVALID_FILE_RANGE_ERRORS" \
-  --description="Count of the errors when the FILE_RANGE environment variable in importStorageFileInfoBigQuery has an invalid format." \
-  --log-filter="resource.type=\"cloud_function\" resource.labels.function_name=\"importStorageFileIntoBigQuery\" \"FILE_RANGE environment variable is incorrectly formatted\"" \
-  && echo "Metric $INVALID_FILE_RANGE_ERRORS has been successfully created."
-
-INVALID_FILE_NAME_ERRORS=InvalidFileNameErrors
-if echo "$EXISTING_METRICS" | grep -q -w "$INVALID_FILE_NAME_ERRORS"
-then
-  echo "Metric $INVALID_FILE_NAME_ERRORS already exists."
-  gcloud logging metrics -q delete $INVALID_FILE_NAME_ERRORS
-fi
-gcloud logging metrics create "$INVALID_FILE_NAME_ERRORS" \
-  --description="Count of the errors when the file name processed by importStorageFileInfoBigQuery has an invalid format." \
-  --log-filter="resource.type=\"cloud_function\" resource.labels.function_name=\"importStorageFileIntoBigQuery\" \"Filename was not properly numbered\"" \
-  && echo "Metric $INVALID_FILE_NAME_ERRORS has been successfully created."
 
 BQ_LOAD_FAILURES=BQLoadFailures
 if echo "$EXISTING_METRICS" | grep -q -w "$BQ_LOAD_FAILURES"
@@ -461,20 +439,9 @@ then
   gcloud logging metrics -q delete $BQ_LOAD_FAILURES
 fi
 gcloud logging metrics create "$BQ_LOAD_FAILURES" \
-  --description="Count of the importStorageFileInfoBigQuery Cloud Function BigQuery load failures" \
-  --log-filter="resource.type=\"cloud_function\" resource.labels.function_name=\"importStorageFileIntoBigQuery\" (\"BigQuery load job failed\" OR \"One or more errors occurred while loading the feed\")" \
+  --description="Count of the import_storage_file_into_big_query Cloud Function BigQuery load failures" \
+  --log-filter="resource.type=\"cloud_function\" resource.labels.function_name=\"import_storage_file_into_big_query\" (\"BigQuery load job failed\" OR \"One or more errors occurred while loading the feed\")" \
   && echo "Metric $BQ_LOAD_FAILURES has been successfully created."
-
-GCS_IMPORTED_FILENAME_SAVE_FAILURES=GCSImportedFilenameSaveFailures
-if echo "$EXISTING_METRICS" | grep -q -w "$GCS_IMPORTED_FILENAME_SAVE_FAILURES"
-then
-  echo "Metric $GCS_IMPORTED_FILENAME_SAVE_FAILURES already exists."
-  gcloud logging metrics -q delete $GCS_IMPORTED_FILENAME_SAVE_FAILURES
-fi
-gcloud logging metrics create "$GCS_IMPORTED_FILENAME_SAVE_FAILURES" \
-  --description="Count of the importStorageFileInfoBigQuery Cloud Function errors of failed GCS inserts of the completed filename" \
-  --log-filter="resource.type=\"cloud_function\" resource.labels.function_name=\"importStorageFileIntoBigQuery\" \"An error occurred when saving the completed filename to GCS\"" \
-  && echo "Metric $GCS_IMPORTED_FILENAME_SAVE_FAILURES has been successfully created."
 
 EOF_EXISTS_DURING_IMPORT_ERRORS=EOFExistsErrors
 if echo "$EXISTING_METRICS" | grep -q -w "$EOF_EXISTS_DURING_IMPORT_ERRORS"
@@ -483,8 +450,8 @@ then
   gcloud logging metrics -q delete $EOF_EXISTS_DURING_IMPORT_ERRORS
 fi
 gcloud logging metrics create "$EOF_EXISTS_DURING_IMPORT_ERRORS" \
-  --description="Count of the importStorageFileInfoBigQuery Cloud Function errors due to existing EOF preventing concurrent runs from starting" \
-  --log-filter="resource.type=\"cloud_function\" resource.labels.function_name=\"importStorageFileIntoBigQuery\" resource.labels.region=\"us-central1\" \"The bucket must be empty before loading feed data. Exiting\""	 \
+  --description="Count of the import_storage_file_into_big_query Cloud Function errors due to existing EOF preventing concurrent runs from starting" \
+  --log-filter="resource.type=\"cloud_function\" resource.labels.function_name=\"import_storage_file_into_big_query\" resource.labels.region=\"us-central1\" \"An EOF file was found in bucket\""	 \
   && echo "Metric $EOF_EXISTS_DURING_IMPORT_ERRORS has been successfully created."
 
 CALCULATE_PRODUCT_CHANGES_ERRORS=CalculateProductChangesErrors
@@ -506,7 +473,7 @@ then
 fi
 gcloud logging metrics create "$SCHEMA_CONFIG_PARSE_FAILURE_FOR_LOAD" \
   --description="Logs indicating that the schema config file failed to be parsed for creating the items table" \
-  --log-filter="resource.type=\"cloud_function\" resource.labels.function_name=\"importStorageFileIntoBigQuery\" \"Unable to map any columns from the schema config\"" \
+  --log-filter="resource.type=\"cloud_function\" resource.labels.function_name=\"import_storage_file_into_big_query\" \"Schema is invalid\"" \
   && echo "Metric $SCHEMA_CONFIG_PARSE_FAILURE_FOR_LOAD has been successfully created."
 
 SCHEMA_CONFIG_PARSE_FAILURE_FOR_CALCULATION=SchemaConfigParseFailureForCalculation
@@ -876,7 +843,6 @@ ALERT_POLICIES=(
   imported-gcs-save-errors-policy.yaml
   invalid-eof-errors-policy.yaml
   invalid-filename-errors-policy.yaml
-  invalid-filerange-errors-policy.yaml
   nonexistent-table-errors-policy.yaml
   schema-config-errors-calc-policy.yaml
   schema-config-errors-load-policy.yaml
@@ -996,7 +962,7 @@ CreateTrigger deploy_functions_calculate_product_changes.yaml \
   _GCP_PROJECT="$GCP_PROJECT"::_TIMEZONE_UTC_OFFSET="$TIMEZONE_UTC_OFFSET"::_EXPIRATION_THRESHOLD="$EXPIRATION_THRESHOLD"::_BQ_DATASET="$BQ_FEED_DATASET"::_DELETES_THRESHOLD="$DELETES_THRESHOLD"::_UPSERTS_THRESHOLD="$UPSERTS_THRESHOLD"::_UPDATE_BUCKET="$UPDATE_BUCKET"::_RETRIGGER_BUCKET="$RETRIGGER_BUCKET"::_FEED_BUCKET="$FEED_BUCKET"::_ARCHIVE_BUCKET="$ARCHIVE_BUCKET"::_COMPLETED_FILES_BUCKET="$COMPLETED_FILES_BUCKET"::_LOCK_BUCKET="$LOCK_BUCKET"
 CreateTrigger deploy_functions_import_file_into_bq.yaml \
   "FeedLoader Deploy Feed Import Function" \
-  _BQ_DATASET="$BQ_FEED_DATASET"::_FILE_RANGE="$FILE_RANGE"::_COMPLETED_FILES_BUCKET="$COMPLETED_FILES_BUCKET"::_FEED_BUCKET="$FEED_BUCKET"::_UPDATE_BUCKET="$UPDATE_BUCKET"::_LOCK_BUCKET="$LOCK_BUCKET"
+  _BQ_DATASET="$BQ_FEED_DATASET"::_COMPLETED_FILES_BUCKET="$COMPLETED_FILES_BUCKET"::_FEED_BUCKET="$FEED_BUCKET"::_UPDATE_BUCKET="$UPDATE_BUCKET"::_LOCK_BUCKET="$LOCK_BUCKET"
 CreateTrigger deploy_functions_retry_feed_import.yaml \
   "FeedLoader Deploy Feed File Retry Function" \
   _BQ_DATASET="$BQ_FEED_DATASET"::_FEED_BUCKET="$FEED_BUCKET"::_UPDATE_BUCKET="$UPDATE_BUCKET"::_COMPLETED_FILES_BUCKET="$COMPLETED_FILES_BUCKET"::_RETRIGGER_BUCKET="$RETRIGGER_BUCKET"

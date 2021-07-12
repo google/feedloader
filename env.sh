@@ -22,7 +22,6 @@ COMPLETED_FILES_BUCKET=[COMPLETED FILES BUCKET] # e.g. gs://completed
 DELETES_THRESHOLD=[Threshold number of items that would be deleted to alert and abort processing]
 EXPIRATION_THRESHOLD=[The number of days that can elapse before an unchanged item will be resent to Content API to prevent it from expiring. Unchanged items will expire in 30 days if not resent to Content API.] # e.g. 25.
 FEED_BUCKET=[FEED BUCKET] # e.g. gs://feed
-FILE_RANGE=[Range of files to limit the BigQuery import to e.g. "0-19"]
 FINISH_EMAILS=[Comma-separated Email Addresses to receive completion emails] # e.g. First Last <person1@domain.com>, First Last <person2@domain.com>
 GCP_PROJECT=[PROJECT ID]
 IS_MCA=[Whether or not the Merchant Id below is an MCA. Must be either True or False]
