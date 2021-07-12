@@ -70,7 +70,7 @@ for most use cases of Feedloader.
 -   Cloud Tasks (https://cloud.google.com/tasks/docs/pricing)
 -   Key Management Service (https://cloud.google.com/kms/pricing)
 -   PubSub (https://cloud.google.com/pubsub/pricing)
--   Stackdriver (https://cloud.google.com/stackdriver/pricing)
+-   Cloud Logging (https://cloud.google.com/stackdriver/pricing)
 
 ## Prerequisites
 
@@ -95,9 +95,6 @@ for most use cases of Feedloader.
 
     -   If a billing account has not been set on the project, set one by
         [following these instructions](https://cloud.google.com/billing/docs/how-to/modify-project).
-
-    -   Create a Stackdriver Workspace for the project by
-        [following the steps here](https://cloud.google.com/monitoring/workspaces/guide#create-quickly).
 
 -   Clone the code from this repository.
 
@@ -236,14 +233,19 @@ for most use cases of Feedloader.
 ## Optimizations
 
 Before Feedloader sends product data to Content API, it has the option to
-interface with a "Shoptimizer" REST API (also packaged in Feedloader within this
-repository) hosted in a Docker container that includes various optimization
-logic which attempts to automatically "fix" the data based on Google Shopping
-best practices.
+interface with a "Shoptimizer" REST API, a standalone solution that can be
+hosted in a Docker container which includes various optimization logic that
+attempts to automatically "fix" the product data being uploaded (based on best
+practices) before going into GMC.
 
-Not only can this API be used standalone (for users that already have a Content
-API interface), but these optimizations can also be extended with custom user
-implementations relatively easily if so desired.
+This is controlled by setting the environment variables
+"SHOPTIMIZER_API_INTEGRATION_ON" and "SHOPTIMIZER_URL" upon installation of
+Feedloader. See the env.sh file for explanations of these variables.
+
+The Shoptimizer API can also be used standalone, for users that already have a
+Content API interface.
+
+See the Shoptimizer repository [here](https://github.com/google/shoptimizer).
 
 ## Testing
 
