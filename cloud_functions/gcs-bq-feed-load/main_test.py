@@ -345,5 +345,5 @@ class ImportStorageFileIntoBigQueryTest(parameterized.TestCase):
 
       main.import_storage_file_into_big_query(self.event, self.context)
 
-      self.assertIn(f'BigQuery load job {test_job_id} failed to finish.',
+      self.assertIn(f'BigQuery load job failed. Job ID: {test_job_id}.',
                     mock_logging.output[0])

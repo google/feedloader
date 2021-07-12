@@ -110,7 +110,7 @@ def _file_to_import_exists(storage_client: storage.client.Client,
                            bucket_name: str, file_name: str) -> bool:
   """Helper function that returns whether the given GCS file exists or not."""
 
-  storage_bucket = storage_client.bucket(bucket_name)
+  storage_bucket = storage_client.get_bucket(bucket_name)
   return storage.Blob(
       bucket=storage_bucket, name=file_name).exists(storage_client)
 
@@ -190,7 +190,7 @@ def _perform_big_query_load(
   except (exceptions.GoogleAPICallError, TimeoutError) as error:
     logging.error(
         RuntimeError(
-            f'BigQuery load job {big_query_load_job.job_id} failed to finish. '
+            f'BigQuery load job failed. Job ID: {big_query_load_job.job_id}. '
             f'Error details: {error}'))
 
   destination_table = big_query_client.get_table(feed_table_path)
