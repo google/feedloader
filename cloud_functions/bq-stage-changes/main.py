@@ -17,12 +17,13 @@
 import logging
 import os
 
-from typing import Any, Dict
+from typing import Any, Dict, List, Tuple
 
 from google.api_core import exceptions
 from google.cloud import storage
 
 _LOCK_FILE_NAME = 'EOF.lock'
+_BUCKET_DELIMITER = '/'
 
 
 def calculate_product_changes(
@@ -48,10 +49,12 @@ def calculate_product_changes(
   """
   del context
 
-  storage_client = storage.Client()
-
   if _eof_is_invalid(event):
     return
+
+  storage_client = storage.Client()
+  feed_bucket = os.environ.get('FEED_BUCKET')
+  completed_files_bucket = os.environ.get('COMPLETED_FILES_BUCKET')
 
   # If the CF was not triggered by a retry, then handle the locking routine.
   if event['name'] != 'EOF.retry':
@@ -64,7 +67,16 @@ def calculate_product_changes(
     # Lock the EOF file at this point to prevent concurrent runs.
     _lock_eof(storage_client, event['bucket'], event['name'])
 
-  print('Empty EOF file detected. Starting diff calculation Cloud Function...')
+  print('Empty EOF file detected. Checking files were imported successfully...')
+
+  import_successful, missing_files = (
+      _ensure_all_files_were_imported(storage_client, feed_bucket,
+                                      completed_files_bucket))
+
+  if not import_successful:
+    _trigger_reupload_of_missing_feed_files(storage_client, missing_files)
+    return
+  print('All the feeds were loaded. Starting calculate_product_changes...')
 
 
 def _eof_is_invalid(event: Dict[str, Any]) -> bool:
@@ -101,3 +113,53 @@ def _lock_eof(storage_client: storage.client.Client, eof_bucket_name: str,
   lock_destination = storage_client.get_bucket(lock_bucket_name_without_prefix)
   eof_bucket.copy_blob(eof_blob, lock_destination, new_name=_LOCK_FILE_NAME)
   eof_blob.delete()
+
+
+def _ensure_all_files_were_imported(
+    storage_client: storage.client.Client, feed_bucket: str,
+    completed_files_bucket: str) -> Tuple[bool, List[str]]:
+  """Helper function that checks attempted feeds against expected filenames."""
+  attempted_feed_files_iterator = storage_client.list_blobs(
+      feed_bucket, delimiter=_BUCKET_DELIMITER)
+  attempted_feed_files = list(attempted_feed_files_iterator)
+  if not attempted_feed_files:
+    logging.error(
+        exceptions.NotFound(
+            'Attempted feeds retrieval failed, or no files are in the bucket.'))
+    return False, []
+  attempted_filenames = [feed.name for feed in attempted_feed_files]
+
+  completed_feed_files_iterator = storage_client.list_blobs(
+      completed_files_bucket)
+  completed_feed_files = list(completed_feed_files_iterator)
+  if not completed_feed_files:
+    logging.error(
+        exceptions.NotFound(
+            'Completed filenames retrieval failed, or no files in the bucket.'))
+    return False, []
+  completed_filenames = set(feed.name for feed in completed_feed_files)
+
+  # Compare the set of attempted files to the set of known completed files to
+  # find out which ones were missed during the BigQuery import.
+  missing_files = [
+      filename for filename in attempted_filenames
+      if filename not in completed_filenames
+  ]
+  if missing_files:
+    return False, missing_files
+
+  return True, []
+
+
+def _trigger_reupload_of_missing_feed_files(
+    storage_client: storage.client.Client, missing_files: List[str]) -> None:
+  """Helper function that uploads a CF trigger to reprocess feed files."""
+  if not missing_files:
+    return
+
+  retrigger_load_bucket = storage_client.get_bucket(
+      os.environ.get('RETRIGGER_BUCKET'))
+  retrigger_load_bucket.blob('REPROCESS_TRIGGER_FILE').upload_from_string(
+      '\n'.join(missing_files))
+
+  print(f'{missing_files} files were missing, so triggering a retry for them.')
