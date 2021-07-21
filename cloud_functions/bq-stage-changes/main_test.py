@@ -14,6 +14,7 @@
 # limitations under the License.
 
 """Unit tests for Calculate Product Changes Cloud Function main.py."""
+import datetime
 import io
 import os
 import types
@@ -21,24 +22,34 @@ import unittest.mock as mock
 
 from absl.testing import parameterized
 
+import iso8601
 import main
 
+_TEST_BQ_DATASET = 'dataset'
 _TEST_COMPLETED_FILES_BUCKET = 'completed-bucket'
 _TEST_EOF_BUCKET = 'update-bucket'
 _TEST_FEED_BUCKET = 'feed-bucket'
 _TEST_FILENAME = 'EOF'
+_TEST_GCP_PROJECT_ID = 'test-project'
+_TEST_ITEMS_TABLE = main._ITEMS_TABLE_NAME
+_TEST_ITEMS_TABLE_EXPIRATION_DURATION = main._ITEMS_TABLE_EXPIRATION_DURATION
 _TEST_LOCK_BUCKET = 'lock-bucket'
-_TEST_LOCK_FILE_NAME = 'EOF.lock'
+_TEST_LOCK_FILE_NAME = main._LOCK_FILE_NAME
 _TEST_RETRIGGER_BUCKET = 'retrigger-bucket'
 
 
 @mock.patch.dict(
     os.environ, {
+        'BQ_DATASET': _TEST_BQ_DATASET,
         'COMPLETED_FILES_BUCKET': _TEST_COMPLETED_FILES_BUCKET,
         'FEED_BUCKET': _TEST_FEED_BUCKET,
+        'GCP_PROJECT': _TEST_GCP_PROJECT_ID,
         'LOCK_BUCKET': _TEST_LOCK_BUCKET,
         'RETRIGGER_BUCKET': _TEST_RETRIGGER_BUCKET,
     })
+@mock.patch(
+    'main._get_current_time_in_utc',
+    return_value=iso8601.parse_date('2021-06-05T08:16:25.183Z'))
 class CalculateProductChangesTest(parameterized.TestCase):
 
   def setUp(self):
@@ -57,8 +68,10 @@ class CalculateProductChangesTest(parameterized.TestCase):
     self.context.timestamp = '2021-06-05T08:16:15.183Z'
 
   @mock.patch('main._lock_exists')
+  @mock.patch('main._set_table_expiration_date')
   def test_import_calculate_product_changes_locks_eof_file_when_no_lock_exists(
-      self, mock_lock_exists):
+      self, mock_set_table_expiration_date, mock_lock_exists, _):
+    del mock_set_table_expiration_date
     with mock.patch('main.storage.Client') as mock_storage_client, mock.patch(
         'sys.stdout', new_callable=io.StringIO) as mock_stdout:
       mock_lock_exists.return_value = False
@@ -77,7 +90,7 @@ class CalculateProductChangesTest(parameterized.TestCase):
 
   @mock.patch('main._lock_exists')
   def test_import_calculate_product_changes_errors_out_when_trigger_file_is_not_eof(
-      self, mock_lock_exists):
+      self, mock_lock_exists, _):
     with mock.patch('main.storage.Client'), self.assertLogs(
         level='ERROR') as mock_logging:
       bad_filename = 'bad_file'
@@ -90,8 +103,10 @@ class CalculateProductChangesTest(parameterized.TestCase):
                     mock_logging.output[0])
 
   @mock.patch('main._lock_exists')
+  @mock.patch('main._set_table_expiration_date')
   def test_import_calculate_product_changes_errors_out_when_trigger_file_is_not_empty(
-      self, mock_lock_exists):
+      self, mock_set_table_expiration_date, mock_lock_exists, _):
+    del mock_set_table_expiration_date
     with mock.patch('main.storage.Client'), self.assertLogs(
         level='ERROR') as mock_logging:
       self.event['size'] = '1'
@@ -105,7 +120,7 @@ class CalculateProductChangesTest(parameterized.TestCase):
   @mock.patch('main._lock_exists')
   @mock.patch('main._lock_eof')
   def test_import_calculate_product_changes_errors_out_when_lock_exists(
-      self, mock_lock_eof, mock_lock_exists):
+      self, mock_lock_eof, mock_lock_exists, _):
     with mock.patch('main.storage.Client'), self.assertLogs(
         level='ERROR') as mock_logging:
       mock_lock_exists.return_value = True
@@ -118,7 +133,7 @@ class CalculateProductChangesTest(parameterized.TestCase):
   @mock.patch('main._lock_exists')
   @mock.patch('main._trigger_reupload_of_missing_feed_files')
   def test_ensure_all_files_were_imported_calls_retry_function_if_any_missing_files_detected(
-      self, mock_trigger_reupload_function, mock_lock_exists):
+      self, mock_trigger_reupload_function, mock_lock_exists, _):
     with mock.patch('main.storage.Client') as mock_storage_client:
       mock_lock_exists.return_value = False
       test_attempted_files = iter([
@@ -142,8 +157,10 @@ class CalculateProductChangesTest(parameterized.TestCase):
       mock_trigger_reupload_function.assert_called()
 
   @mock.patch('main._lock_exists')
+  @mock.patch('main._set_table_expiration_date')
   def test_ensure_all_files_were_imported_returns_true_if_attempted_and_completed_file_sets_match(
-      self, mock_lock_exists):
+      self, mock_set_table_expiration_date, mock_lock_exists, _):
+    del mock_set_table_expiration_date
     with mock.patch('main.storage.Client') as mock_storage_client, mock.patch(
         'sys.stdout', new_callable=io.StringIO) as mock_stdout:
       mock_lock_exists.return_value = False
@@ -167,7 +184,7 @@ class CalculateProductChangesTest(parameterized.TestCase):
 
   @mock.patch('main._lock_exists')
   def test_trigger_reupload_of_missing_feed_files_uploads_filenames_string_to_retrigger_bucket(
-      self, mock_lock_exists):
+      self, mock_lock_exists, _):
     with mock.patch('main.storage.Client') as mock_storage_client:
       mock_lock_exists.return_value = False
       mock_get_bucket = mock_storage_client.return_value.get_bucket
@@ -196,7 +213,7 @@ class CalculateProductChangesTest(parameterized.TestCase):
 
   @mock.patch('main._lock_exists')
   def test_ensure_all_files_were_imported_returns_logs_error_when_attempted_files_is_empty(
-      self, mock_lock_exists):
+      self, mock_lock_exists, _):
     with mock.patch(
         'main.storage.Client') as mock_storage_client, self.assertLogs(
             level='ERROR') as mock_logging:
@@ -217,7 +234,7 @@ class CalculateProductChangesTest(parameterized.TestCase):
 
   @mock.patch('main._lock_exists')
   def test_ensure_all_files_were_imported_returns_logs_error_when_completed_files_is_empty(
-      self, mock_lock_exists):
+      self, mock_lock_exists, _):
     with mock.patch(
         'main.storage.Client') as mock_storage_client, self.assertLogs(
             level='ERROR') as mock_logging:
@@ -236,3 +253,29 @@ class CalculateProductChangesTest(parameterized.TestCase):
 
       self.assertIn('Completed filenames retrieval failed',
                     mock_logging.output[0])
+
+  @mock.patch('main._lock_exists')
+  @mock.patch('main._ensure_all_files_were_imported')
+  def test_set_table_expiration_date_sets_table_expiration(
+      self, mock_ensure_all_files_were_imported, mock_lock_exists, _):
+    with mock.patch('main.storage.Client'), mock.patch(
+        'main.bigquery.Client') as mock_bigquery_client:
+      mock_lock_exists.return_value = False
+      mock_ensure_all_files_were_imported.return_value = (True, [])
+      test_table_with_expiration = (
+          types.SimpleNamespace(expires=datetime.datetime.now()))
+      mock_bigquery_client.return_value.get_table.return_value = (
+          test_table_with_expiration)
+
+      expiration_duration = datetime.timedelta(
+          milliseconds=_TEST_ITEMS_TABLE_EXPIRATION_DURATION)
+      expected_expiration = iso8601.parse_date(
+          '2021-06-05T08:16:25.183Z') + expiration_duration
+      expected_table_with_expiration = (
+          types.SimpleNamespace(expires=expected_expiration))
+
+      main.calculate_product_changes(self.event, self.context)
+      mock_bigquery_client.return_value.get_table.assert_called_with(
+          f'{_TEST_GCP_PROJECT_ID}.{_TEST_BQ_DATASET}.{_TEST_ITEMS_TABLE}')
+      mock_bigquery_client.return_value.update_table.assert_called_with(
+          expected_table_with_expiration, ['expires'])

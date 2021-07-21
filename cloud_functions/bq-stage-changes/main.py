@@ -13,17 +13,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Cloud Function that triggers on GCS bucket upload to import data into BQ."""
+"""CF that triggers on GCS bucket upload to calculate product diffs."""
+import datetime
 import logging
 import os
-
 from typing import Any, Dict, List, Tuple
 
 from google.api_core import exceptions
+from google.cloud import bigquery
 from google.cloud import storage
+import pytz
 
-_LOCK_FILE_NAME = 'EOF.lock'
 _BUCKET_DELIMITER = '/'
+_ITEMS_TABLE_EXPIRATION_DURATION = 43200000  # 12 hours.
+_ITEMS_TABLE_NAME = 'items'
+_LOCK_FILE_NAME = 'EOF.lock'
 
 
 def calculate_product_changes(
@@ -52,6 +56,7 @@ def calculate_product_changes(
   if _eof_is_invalid(event):
     return
 
+  bigquery_client = bigquery.Client()
   storage_client = storage.Client()
   feed_bucket = os.environ.get('FEED_BUCKET')
   completed_files_bucket = os.environ.get('COMPLETED_FILES_BUCKET')
@@ -77,6 +82,10 @@ def calculate_product_changes(
     _trigger_reupload_of_missing_feed_files(storage_client, missing_files)
     return
   print('All the feeds were loaded. Starting calculate_product_changes...')
+
+  fully_qualified_items_table = f'{os.environ.get("GCP_PROJECT")}.{os.environ.get("BQ_DATASET")}.{_ITEMS_TABLE_NAME}'
+  _set_table_expiration_date(bigquery_client, fully_qualified_items_table,
+                             _ITEMS_TABLE_EXPIRATION_DURATION)
 
 
 def _eof_is_invalid(event: Dict[str, Any]) -> bool:
@@ -163,3 +172,26 @@ def _trigger_reupload_of_missing_feed_files(
       '\n'.join(missing_files))
 
   print(f'{missing_files} files were missing, so triggering a retry for them.')
+
+
+def _set_table_expiration_date(bigquery_client: bigquery.client.Client,
+                               table_id: str, duration_ms: int) -> None:
+  """Sets the provided table's expiration to the provided duration.
+
+  Args:
+      bigquery_client: The BigQuery python client instance.
+      table_id: A fully-qualified string reference to a BigQuery table in the
+        format 'your-project.your_dataset.your_table'
+      duration_ms: The number of milliseconds in the future when the table
+        should expire.
+  """
+  target_table = bigquery_client.get_table(table_id)
+  expiration_date = _get_current_time_in_utc() + datetime.timedelta(
+      milliseconds=duration_ms)
+  target_table.expires = expiration_date
+  bigquery_client.update_table(target_table, ['expires'])
+
+
+def _get_current_time_in_utc() -> datetime.datetime:
+  """Helper function that wraps retrieving the current date and time in UTC."""
+  return datetime.datetime.now(pytz.utc)
