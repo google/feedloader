@@ -21,6 +21,7 @@ import types
 import unittest.mock as mock
 
 from absl.testing import parameterized
+from google.api_core import exceptions
 
 import iso8601
 import main
@@ -152,18 +153,19 @@ class CalculateProductChangesTest(parameterized.TestCase):
 
       self.assertEqual(mock_list_blobs.call_args_list[0].args[0],
                        _TEST_FEED_BUCKET)
-      self.assertEqual(mock_list_blobs.call_args_list[1].args[0],
-                       _TEST_COMPLETED_FILES_BUCKET)
       mock_trigger_reupload_function.assert_called()
 
   @mock.patch('main._lock_exists')
   @mock.patch('main._set_table_expiration_date')
+  @mock.patch('main._cleanup_completed_filenames')
   def test_ensure_all_files_were_imported_returns_true_if_attempted_and_completed_file_sets_match(
-      self, mock_set_table_expiration_date, mock_lock_exists, _):
+      self, mock_cleanup_completed_filenames, mock_set_table_expiration_date,
+      mock_lock_exists, _):
     del mock_set_table_expiration_date
     with mock.patch('main.storage.Client') as mock_storage_client, mock.patch(
         'sys.stdout', new_callable=io.StringIO) as mock_stdout:
       mock_lock_exists.return_value = False
+      mock_cleanup_completed_filenames.return_value = True
       test_attempted_files = iter([
           types.SimpleNamespace(name='file1'),
           types.SimpleNamespace(name='file2'),
@@ -181,6 +183,37 @@ class CalculateProductChangesTest(parameterized.TestCase):
       main.calculate_product_changes(self.event, self.context)
 
       self.assertIn('All the feeds were loaded.', mock_stdout.getvalue())
+
+  @mock.patch('main._lock_exists')
+  @mock.patch('main._set_table_expiration_date')
+  @mock.patch('main._cleanup_completed_filenames')
+  def test_cleanup_completed_filenames_logs_error_if_it_returned_false(
+      self, mock_cleanup_completed_filenames, mock_set_table_expiration_date,
+      mock_lock_exists, _):
+    del mock_set_table_expiration_date
+    with mock.patch(
+        'main.storage.Client') as mock_storage_client, self.assertLogs(
+            level='ERROR') as mock_logging:
+      mock_lock_exists.return_value = False
+      mock_cleanup_completed_filenames.return_value = False
+      test_attempted_files = iter([
+          types.SimpleNamespace(name='file1'),
+          types.SimpleNamespace(name='file2'),
+          types.SimpleNamespace(name='file3')
+      ])
+      test_completed_files = iter([
+          types.SimpleNamespace(name='file1'),
+          types.SimpleNamespace(name='file3'),
+          types.SimpleNamespace(name='file2')
+      ])
+      mock_storage_client.return_value.list_blobs.side_effect = [
+          test_attempted_files, test_completed_files
+      ]
+
+      main.calculate_product_changes(self.event, self.context)
+
+      self.assertIn('Cleanup completed filenames failed.',
+                    mock_logging.output[0])
 
   @mock.patch('main._lock_exists')
   def test_trigger_reupload_of_missing_feed_files_uploads_filenames_string_to_retrigger_bucket(
@@ -256,11 +289,14 @@ class CalculateProductChangesTest(parameterized.TestCase):
 
   @mock.patch('main._lock_exists')
   @mock.patch('main._ensure_all_files_were_imported')
+  @mock.patch('main._cleanup_completed_filenames')
   def test_set_table_expiration_date_sets_table_expiration(
-      self, mock_ensure_all_files_were_imported, mock_lock_exists, _):
+      self, mock_cleanup_completed_filenames,
+      mock_ensure_all_files_were_imported, mock_lock_exists, _):
     with mock.patch('main.storage.Client'), mock.patch(
         'main.bigquery.Client') as mock_bigquery_client:
       mock_lock_exists.return_value = False
+      mock_cleanup_completed_filenames.return_value = True
       mock_ensure_all_files_were_imported.return_value = (True, [])
       test_table_with_expiration = (
           types.SimpleNamespace(expires=datetime.datetime.now()))
@@ -279,3 +315,61 @@ class CalculateProductChangesTest(parameterized.TestCase):
           f'{_TEST_GCP_PROJECT_ID}.{_TEST_BQ_DATASET}.{_TEST_ITEMS_TABLE}')
       mock_bigquery_client.return_value.update_table.assert_called_with(
           expected_table_with_expiration, ['expires'])
+
+  @mock.patch('main._lock_exists')
+  @mock.patch('main._set_table_expiration_date')
+  @mock.patch('main._cleanup_completed_filenames')
+  def test_cleanup_completed_filenames_is_called_if_ensure_all_files_were_imported_was_successful(
+      self, mock_cleanup_completed_filenames, mock_set_table_expiration_date,
+      mock_lock_exists, _):
+    del mock_set_table_expiration_date
+    with mock.patch('main.storage.Client') as mock_storage_client:
+      mock_lock_exists.return_value = False
+      test_attempted_files = iter([
+          types.SimpleNamespace(name='file1'),
+          types.SimpleNamespace(name='file2'),
+          types.SimpleNamespace(name='file3')
+      ])
+      test_completed_files = iter([
+          types.SimpleNamespace(name='file1'),
+          types.SimpleNamespace(name='file3'),
+          types.SimpleNamespace(name='file2')
+      ])
+      mock_storage_client.return_value.list_blobs.side_effect = [
+          test_attempted_files, test_completed_files
+      ]
+
+      main.calculate_product_changes(self.event, self.context)
+
+      mock_cleanup_completed_filenames.assert_called()
+
+  def test_delete_completed_file_deletes_file_from_completed_bucket(self, _):
+    with mock.patch('main.storage.Client') as mock_storage_client, mock.patch(
+        'main._COMPLETED_FILES_BUCKET', _TEST_COMPLETED_FILES_BUCKET):
+      test_bucket_file_to_delete = 'test_feed_file.txt'
+      mock_get_bucket = mock_storage_client.return_value.get_bucket
+
+      main._delete_completed_file(test_bucket_file_to_delete)
+
+      mock_get_bucket.assert_called_with(_TEST_COMPLETED_FILES_BUCKET)
+      mock_get_bucket.return_value.delete_blob.assert_called_with(
+          test_bucket_file_to_delete)
+
+  def test_delete_completed_file_logs_error_on_blob_not_found(self, _):
+    with mock.patch('main.storage.Client') as mock_storage_client, mock.patch(
+        'main._COMPLETED_FILES_BUCKET',
+        _TEST_COMPLETED_FILES_BUCKET), self.assertLogs(
+            level='ERROR') as mock_logging:
+      test_bucket_file_to_delete = 'test_feed_file.txt'
+      mock_get_bucket = mock_storage_client.return_value.get_bucket
+      mock_get_bucket.return_value.delete_blob.side_effect = (
+          exceptions.NotFound('404'))
+
+      main._delete_completed_file(test_bucket_file_to_delete)
+
+      mock_get_bucket.assert_called_with(_TEST_COMPLETED_FILES_BUCKET)
+      mock_get_bucket.return_value.delete_blob.assert_called_with(
+          test_bucket_file_to_delete)
+      self.assertIn(
+          f'Failed to delete {test_bucket_file_to_delete} in {_TEST_COMPLETED_FILES_BUCKET}.',
+          mock_logging.output[0])

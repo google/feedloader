@@ -16,18 +16,22 @@
 """CF that triggers on GCS bucket upload to calculate product diffs."""
 import datetime
 import logging
+import multiprocessing
 import os
 from typing import Any, Dict, List, Tuple
 
 from google.api_core import exceptions
 from google.cloud import bigquery
 from google.cloud import storage
+
 import pytz
 
 _BUCKET_DELIMITER = '/'
+_COMPLETED_FILES_BUCKET = os.environ.get('COMPLETED_FILES_BUCKET')
 _ITEMS_TABLE_EXPIRATION_DURATION = 43200000  # 12 hours.
 _ITEMS_TABLE_NAME = 'items'
 _LOCK_FILE_NAME = 'EOF.lock'
+_PROJECT_METADATA_URL = 'http://metadata.google.internal/computeMetadata/v1/project/project-id'
 
 
 def calculate_product_changes(
@@ -59,7 +63,6 @@ def calculate_product_changes(
   bigquery_client = bigquery.Client()
   storage_client = storage.Client()
   feed_bucket = os.environ.get('FEED_BUCKET')
-  completed_files_bucket = os.environ.get('COMPLETED_FILES_BUCKET')
 
   # If the CF was not triggered by a retry, then handle the locking routine.
   if event['name'] != 'EOF.retry':
@@ -75,12 +78,18 @@ def calculate_product_changes(
   print('Empty EOF file detected. Checking files were imported successfully...')
 
   import_successful, missing_files = (
-      _ensure_all_files_were_imported(storage_client, feed_bucket,
-                                      completed_files_bucket))
+      _ensure_all_files_were_imported(storage_client, feed_bucket))
 
   if not import_successful:
     _trigger_reupload_of_missing_feed_files(storage_client, missing_files)
     return
+  else:
+    cleanup_completed_files_successful = (
+        _cleanup_completed_filenames(storage_client))
+    if not cleanup_completed_files_successful:
+      logging.error(RuntimeError('Cleanup completed filenames failed.'))
+      return
+
   print('All the feeds were loaded. Starting calculate_product_changes...')
 
   fully_qualified_items_table = f'{os.environ.get("GCP_PROJECT")}.{os.environ.get("BQ_DATASET")}.{_ITEMS_TABLE_NAME}'
@@ -124,10 +133,10 @@ def _lock_eof(storage_client: storage.client.Client, eof_bucket_name: str,
   eof_blob.delete()
 
 
-def _ensure_all_files_were_imported(
-    storage_client: storage.client.Client, feed_bucket: str,
-    completed_files_bucket: str) -> Tuple[bool, List[str]]:
+def _ensure_all_files_were_imported(storage_client: storage.client.Client,
+                                    feed_bucket: str) -> Tuple[bool, List[str]]:
   """Helper function that checks attempted feeds against expected filenames."""
+
   attempted_feed_files_iterator = storage_client.list_blobs(
       feed_bucket, delimiter=_BUCKET_DELIMITER)
   attempted_feed_files = list(attempted_feed_files_iterator)
@@ -139,7 +148,7 @@ def _ensure_all_files_were_imported(
   attempted_filenames = [feed.name for feed in attempted_feed_files]
 
   completed_feed_files_iterator = storage_client.list_blobs(
-      completed_files_bucket)
+      _COMPLETED_FILES_BUCKET)
   completed_feed_files = list(completed_feed_files_iterator)
   if not completed_feed_files:
     logging.error(
@@ -195,3 +204,43 @@ def _set_table_expiration_date(bigquery_client: bigquery.client.Client,
 def _get_current_time_in_utc() -> datetime.datetime:
   """Helper function that wraps retrieving the current date and time in UTC."""
   return datetime.datetime.now(pytz.utc)
+
+
+def _cleanup_completed_filenames(storage_client: storage.client.Client) -> bool:
+  """Deletes all files from the completed bucket.
+
+  Args:
+    storage_client: The Cloud Storage python client instance.
+
+  Returns:
+    True if all deletions succeeded, otherwise False.
+  """
+  print('Removing temp feed filenames from GCS...')
+  completed_file_blobs = storage_client.list_blobs(_COMPLETED_FILES_BUCKET)
+  with multiprocessing.Pool() as pool:
+    results = list(
+        pool.imap_unordered(_delete_completed_file,
+                            (blob.name for blob in completed_file_blobs)))
+    return all(results)
+  return False
+
+
+def _delete_completed_file(filename: str) -> bool:
+  """Deletes the specified file from the completed files bucket.
+
+  Args:
+    filename: The name of the blob file to delete.
+
+  Returns:
+    True if the file was deleted successfully, otherwise False.
+  """
+  storage_client = storage.Client()
+  completed_files_bucket = storage_client.get_bucket(_COMPLETED_FILES_BUCKET)
+  try:
+    completed_files_bucket.delete_blob(filename)
+  except exceptions.NotFound:
+    logging.error(
+        exceptions.NotFound(
+            f'Failed to delete {filename} in {_COMPLETED_FILES_BUCKET}.'))
+    return False
+  return True
