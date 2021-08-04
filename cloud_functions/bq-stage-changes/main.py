@@ -27,11 +27,10 @@ from google.cloud import storage
 import pytz
 
 _BUCKET_DELIMITER = '/'
-_COMPLETED_FILES_BUCKET = os.environ.get('COMPLETED_FILES_BUCKET')
+_COMPLETED_FILES_BUCKET = ''
 _ITEMS_TABLE_EXPIRATION_DURATION = 43200000  # 12 hours.
 _ITEMS_TABLE_NAME = 'items'
 _LOCK_FILE_NAME = 'EOF.lock'
-_PROJECT_METADATA_URL = 'http://metadata.google.internal/computeMetadata/v1/project/project-id'
 
 
 def calculate_product_changes(
@@ -57,44 +56,90 @@ def calculate_product_changes(
   """
   del context
 
+  bq_dataset, feed_bucket, gcp_project, lock_bucket, retrigger_bucket = (
+      _load_environment_variables())
+
+  fully_qualified_items_table_name = (
+      f'{gcp_project}.{bq_dataset}.{_ITEMS_TABLE_NAME}')
+
   if _eof_is_invalid(event):
     return
 
   bigquery_client = bigquery.Client()
   storage_client = storage.Client()
-  feed_bucket = os.environ.get('FEED_BUCKET')
 
   # If the CF was not triggered by a retry, then handle the locking routine.
   if event['name'] != 'EOF.retry':
-    if _lock_exists(storage_client):
+    if _lock_exists(storage_client, lock_bucket):
       logging.error(
-          exceptions.AlreadyExists((
-              'An EOF.lock file was found, indicating that this CF is still running.'
-              'Exiting Function...')))
+          exceptions.AlreadyExists(
+              ('An EOF.lock file was found, indicating that this CF is still '
+               'running. Exiting Function...')))
       return
     # Lock the EOF file at this point to prevent concurrent runs.
-    _lock_eof(storage_client, event['bucket'], event['name'])
+    _lock_eof(storage_client, event['bucket'], event['name'], lock_bucket)
 
   print('Empty EOF file detected. Checking files were imported successfully...')
 
   import_successful, missing_files = (
-      _ensure_all_files_were_imported(storage_client, feed_bucket))
+      _ensure_all_files_were_imported(storage_client, bigquery_client,
+                                      feed_bucket, lock_bucket,
+                                      fully_qualified_items_table_name))
 
   if not import_successful:
-    _trigger_reupload_of_missing_feed_files(storage_client, missing_files)
+    _trigger_reupload_of_missing_feed_files(storage_client, missing_files,
+                                            retrigger_bucket)
     return
   else:
+    print('File import check successful. Proceeding to cleanup completed '
+          'filenames from Cloud Storage...')
     cleanup_completed_files_successful = (
         _cleanup_completed_filenames(storage_client))
     if not cleanup_completed_files_successful:
       logging.error(RuntimeError('Cleanup completed filenames failed.'))
       return
 
-  print('All the feeds were loaded. Starting calculate_product_changes...')
+  print(
+      'Completed files cleanup finished. Setting expiration on items table...')
 
-  fully_qualified_items_table = f'{os.environ.get("GCP_PROJECT")}.{os.environ.get("BQ_DATASET")}.{_ITEMS_TABLE_NAME}'
-  _set_table_expiration_date(bigquery_client, fully_qualified_items_table,
+  _set_table_expiration_date(bigquery_client, fully_qualified_items_table_name,
                              _ITEMS_TABLE_EXPIRATION_DURATION)
+
+  print('Expiration set on items table. Proceeding to archive feed files...')
+
+  try:
+    _archive_folder(storage_client, feed_bucket)
+  except Exception as error:  
+    # Stackdriver does not log errors to GCP unless using .error(Exception).
+    # refex: disable=pytotw.037
+    logging.error(
+        RuntimeError(
+            'One or more errors occurred in archiving. Cleaning up...'), error)
+    _clean_up(storage_client, bigquery_client, lock_bucket,
+              fully_qualified_items_table_name)
+    return
+
+  print('All the feeds were loaded and archiving finished. Starting '
+        'calculate_product_changes...')
+
+
+def _load_environment_variables() -> Tuple[str, str, str, str, str]:
+  """Helper function that loads all environment variables."""
+  bq_dataset = os.environ.get('BQ_DATASET')
+  gcp_project = os.environ.get('GCP_PROJECT')
+  retrigger_bucket = os.environ.get('RETRIGGER_BUCKET')
+
+  # Strip out the bucket prefixes in case the user set their env var with one.
+  completed_files_bucket = os.environ.get('COMPLETED_FILES_BUCKET').replace(
+      'gs://', '')
+  feed_bucket = os.environ.get('FEED_BUCKET').replace('gs://', '')
+  lock_bucket = os.environ.get('LOCK_BUCKET').replace('gs://', '')
+
+  # Global, because multiprocessing lib only accepts a single-argument function.
+  global _COMPLETED_FILES_BUCKET
+  _COMPLETED_FILES_BUCKET = completed_files_bucket
+
+  return bq_dataset, feed_bucket, gcp_project, lock_bucket, retrigger_bucket
 
 
 def _eof_is_invalid(event: Dict[str, Any]) -> bool:
@@ -112,29 +157,28 @@ def _eof_is_invalid(event: Dict[str, Any]) -> bool:
   return False
 
 
-def _lock_exists(storage_client: storage.client.Client) -> bool:
+def _lock_exists(storage_client: storage.client.Client,
+                 lock_bucket: str) -> bool:
   """Helper method that returns True if EOF.lock exists, otherwise False."""
-  eof_lock_bucket = storage_client.get_bucket(os.environ.get('LOCK_BUCKET'))
+  eof_lock_bucket = storage_client.get_bucket(lock_bucket)
   return storage.Blob(
       bucket=eof_lock_bucket, name=_LOCK_FILE_NAME).exists(storage_client)
 
 
 def _lock_eof(storage_client: storage.client.Client, eof_bucket_name: str,
-              eof_filename: str) -> None:
+              eof_filename: str, lock_bucket: str) -> None:
   """Helper function that sets the EOF to a "locked" state."""
   eof_bucket = storage_client.get_bucket(eof_bucket_name)
   eof_blob = eof_bucket.get_blob(eof_filename)
-
-  # Strip out the bucket prefix in case the user set their env var with one.
-  lock_bucket_name_without_prefix = os.environ.get('LOCK_BUCKET').replace(
-      'gs://', '')
-  lock_destination = storage_client.get_bucket(lock_bucket_name_without_prefix)
+  lock_destination = storage_client.get_bucket(lock_bucket)
   eof_bucket.copy_blob(eof_blob, lock_destination, new_name=_LOCK_FILE_NAME)
   eof_blob.delete()
 
 
-def _ensure_all_files_were_imported(storage_client: storage.client.Client,
-                                    feed_bucket: str) -> Tuple[bool, List[str]]:
+def _ensure_all_files_were_imported(
+    storage_client: storage.client.Client,
+    bigquery_client: bigquery.client.Client, feed_bucket: str, lock_bucket: str,
+    items_table_name: str) -> Tuple[bool, List[str]]:
   """Helper function that checks attempted feeds against expected filenames."""
 
   attempted_feed_files_iterator = storage_client.list_blobs(
@@ -144,6 +188,7 @@ def _ensure_all_files_were_imported(storage_client: storage.client.Client,
     logging.error(
         exceptions.NotFound(
             'Attempted feeds retrieval failed, or no files are in the bucket.'))
+    _clean_up(storage_client, bigquery_client, lock_bucket, items_table_name)
     return False, []
   attempted_filenames = [feed.name for feed in attempted_feed_files]
 
@@ -154,6 +199,7 @@ def _ensure_all_files_were_imported(storage_client: storage.client.Client,
     logging.error(
         exceptions.NotFound(
             'Completed filenames retrieval failed, or no files in the bucket.'))
+    _clean_up(storage_client, bigquery_client, lock_bucket, items_table_name)
     return False, []
   completed_filenames = set(feed.name for feed in completed_feed_files)
 
@@ -165,18 +211,17 @@ def _ensure_all_files_were_imported(storage_client: storage.client.Client,
   ]
   if missing_files:
     return False, missing_files
-
   return True, []
 
 
 def _trigger_reupload_of_missing_feed_files(
-    storage_client: storage.client.Client, missing_files: List[str]) -> None:
+    storage_client: storage.client.Client, missing_files: List[str],
+    retrigger_bucket: str) -> None:
   """Helper function that uploads a CF trigger to reprocess feed files."""
   if not missing_files:
     return
 
-  retrigger_load_bucket = storage_client.get_bucket(
-      os.environ.get('RETRIGGER_BUCKET'))
+  retrigger_load_bucket = storage_client.get_bucket(retrigger_bucket)
   retrigger_load_bucket.blob('REPROCESS_TRIGGER_FILE').upload_from_string(
       '\n'.join(missing_files))
 
@@ -215,7 +260,6 @@ def _cleanup_completed_filenames(storage_client: storage.client.Client) -> bool:
   Returns:
     True if all deletions succeeded, otherwise False.
   """
-  print('Removing temp feed filenames from GCS...')
   completed_file_blobs = storage_client.list_blobs(_COMPLETED_FILES_BUCKET)
   with multiprocessing.Pool() as pool:
     results = list(
@@ -244,3 +288,36 @@ def _delete_completed_file(filename: str) -> bool:
             f'Failed to delete {filename} in {_COMPLETED_FILES_BUCKET}.'))
     return False
   return True
+
+
+def _archive_folder(storage_client: storage.client.Client,
+                    feed_bucket: str) -> None:
+  """Renames current feeds to subfolder with timestamp for archival purposes."""
+  feed_files = storage_client.list_blobs(
+      feed_bucket, delimiter=_BUCKET_DELIMITER)
+  feed_bucket = storage_client.get_bucket(feed_bucket)
+  current_datetime = _get_current_time_in_utc().strftime('%Y_%m_%d_%H_%M_%p')
+  for feed_file_to_archive in feed_files:
+    archive_destination = f'archive/{current_datetime}/{feed_file_to_archive.name}'
+    result = feed_bucket.rename_blob(feed_file_to_archive, archive_destination)
+    if not result:
+      raise exceptions.GoogleAPICallError(
+          f'rename_blob failed for {feed_file_to_archive.name}')
+
+
+def _clean_up(storage_client: storage.client.Client,
+              bigquery_client: bigquery.client.Client,
+              lock_bucket: str,
+              items_table_name: str,
+              clean_items_table=True) -> None:
+  """Cleans up the state of the run (items table and EOF) upon error cases."""
+  eof_lock_bucket = storage_client.get_bucket(lock_bucket)
+
+  # get_blob returns None if it doesn't exist, so no need to call exists().
+  eof_lock_file = eof_lock_bucket.get_blob(_LOCK_FILE_NAME)
+
+  if eof_lock_file:
+    eof_lock_file.delete()
+
+  if clean_items_table:
+    bigquery_client.delete_table(items_table_name, not_found_ok=True)

@@ -37,6 +37,7 @@ _TEST_ITEMS_TABLE_EXPIRATION_DURATION = main._ITEMS_TABLE_EXPIRATION_DURATION
 _TEST_LOCK_BUCKET = 'lock-bucket'
 _TEST_LOCK_FILE_NAME = main._LOCK_FILE_NAME
 _TEST_RETRIGGER_BUCKET = 'retrigger-bucket'
+_TEST_TIMESTAMP = '2021-06-05T08:16:25.183Z'
 
 
 @mock.patch.dict(
@@ -50,7 +51,7 @@ _TEST_RETRIGGER_BUCKET = 'retrigger-bucket'
     })
 @mock.patch(
     'main._get_current_time_in_utc',
-    return_value=iso8601.parse_date('2021-06-05T08:16:25.183Z'))
+    return_value=iso8601.parse_date(_TEST_TIMESTAMP))
 class CalculateProductChangesTest(parameterized.TestCase):
 
   def setUp(self):
@@ -70,13 +71,19 @@ class CalculateProductChangesTest(parameterized.TestCase):
 
   @mock.patch('main._lock_exists')
   @mock.patch('main._set_table_expiration_date')
+  @mock.patch('main._clean_up')
+  @mock.patch('main._archive_folder')
   def test_import_calculate_product_changes_locks_eof_file_when_no_lock_exists(
-      self, mock_set_table_expiration_date, mock_lock_exists, _):
+      self, mock_archive_folder, mock_clean_up, mock_set_table_expiration_date,
+      mock_lock_exists, _):
+    del mock_clean_up
     del mock_set_table_expiration_date
+
     with mock.patch('main.storage.Client') as mock_storage_client, mock.patch(
         'sys.stdout', new_callable=io.StringIO) as mock_stdout:
       mock_lock_exists.return_value = False
       mock_get_bucket = mock_storage_client.return_value.get_bucket
+      mock_archive_folder.return_value = True
 
       main.calculate_product_changes(self.event, self.context)
 
@@ -151,17 +158,22 @@ class CalculateProductChangesTest(parameterized.TestCase):
 
       main.calculate_product_changes(self.event, self.context)
 
-      self.assertEqual(mock_list_blobs.call_args_list[0].args[0],
-                       _TEST_FEED_BUCKET)
+      self.assertEqual(_TEST_FEED_BUCKET,
+                       mock_list_blobs.call_args_list[0].args[0])
       mock_trigger_reupload_function.assert_called()
 
   @mock.patch('main._lock_exists')
   @mock.patch('main._set_table_expiration_date')
   @mock.patch('main._cleanup_completed_filenames')
+  @mock.patch('main._clean_up')
+  @mock.patch('main._archive_folder')
   def test_ensure_all_files_were_imported_returns_true_if_attempted_and_completed_file_sets_match(
-      self, mock_cleanup_completed_filenames, mock_set_table_expiration_date,
+      self, mock_archive_folder, mock_clean_up,
+      mock_cleanup_completed_filenames, mock_set_table_expiration_date,
       mock_lock_exists, _):
+    del mock_clean_up
     del mock_set_table_expiration_date
+
     with mock.patch('main.storage.Client') as mock_storage_client, mock.patch(
         'sys.stdout', new_callable=io.StringIO) as mock_stdout:
       mock_lock_exists.return_value = False
@@ -179,16 +191,17 @@ class CalculateProductChangesTest(parameterized.TestCase):
       mock_storage_client.return_value.list_blobs.side_effect = [
           test_attempted_files, test_completed_files
       ]
+      mock_archive_folder.return_value = True
 
       main.calculate_product_changes(self.event, self.context)
 
-      self.assertIn('All the feeds were loaded.', mock_stdout.getvalue())
+      self.assertIn('All the feeds were loaded', mock_stdout.getvalue())
 
   @mock.patch('main._lock_exists')
-  @mock.patch('main._set_table_expiration_date')
   @mock.patch('main._cleanup_completed_filenames')
+  @mock.patch('main._set_table_expiration_date')
   def test_cleanup_completed_filenames_logs_error_if_it_returned_false(
-      self, mock_cleanup_completed_filenames, mock_set_table_expiration_date,
+      self, mock_set_table_expiration_date, mock_cleanup_completed_filenames,
       mock_lock_exists, _):
     del mock_set_table_expiration_date
     with mock.patch(
@@ -245,8 +258,10 @@ class CalculateProductChangesTest(parameterized.TestCase):
                        'file2\nfile4')
 
   @mock.patch('main._lock_exists')
+  @mock.patch('main._clean_up')
   def test_ensure_all_files_were_imported_returns_logs_error_when_attempted_files_is_empty(
-      self, mock_lock_exists, _):
+      self, mock_clean_up, mock_lock_exists, _):
+    del mock_clean_up
     with mock.patch(
         'main.storage.Client') as mock_storage_client, self.assertLogs(
             level='ERROR') as mock_logging:
@@ -266,8 +281,32 @@ class CalculateProductChangesTest(parameterized.TestCase):
       self.assertIn('Attempted feeds retrieval failed', mock_logging.output[0])
 
   @mock.patch('main._lock_exists')
+  @mock.patch('main._clean_up')
+  def test_ensure_all_files_were_imported_calls_clean_up_when_attempted_files_is_empty(
+      self, mock_clean_up, mock_lock_exists, _):
+    with mock.patch('main.storage.Client') as mock_storage_client:
+      mock_lock_exists.return_value = False
+      test_attempted_files = iter([])
+      test_completed_files = iter([
+          types.SimpleNamespace(name='file1'),
+          types.SimpleNamespace(name='file3'),
+          types.SimpleNamespace(name='file2')
+      ])
+      mock_storage_client.return_value.list_blobs.side_effect = [
+          test_attempted_files, test_completed_files
+      ]
+
+      main.calculate_product_changes(self.event, self.context)
+
+      mock_clean_up.assert_called_with(
+          mock.ANY, mock.ANY, _TEST_LOCK_BUCKET,
+          f'{_TEST_GCP_PROJECT_ID}.{_TEST_BQ_DATASET}.{_TEST_ITEMS_TABLE}')
+
+  @mock.patch('main._lock_exists')
+  @mock.patch('main._clean_up')
   def test_ensure_all_files_were_imported_returns_logs_error_when_completed_files_is_empty(
-      self, mock_lock_exists, _):
+      self, mock_clean_up, mock_lock_exists, _):
+    del mock_clean_up
     with mock.patch(
         'main.storage.Client') as mock_storage_client, self.assertLogs(
             level='ERROR') as mock_logging:
@@ -286,6 +325,28 @@ class CalculateProductChangesTest(parameterized.TestCase):
 
       self.assertIn('Completed filenames retrieval failed',
                     mock_logging.output[0])
+
+  @mock.patch('main._lock_exists')
+  @mock.patch('main._clean_up')
+  def test_ensure_all_files_were_imported_calls_clean_up_when_completed_files_is_empty(
+      self, mock_clean_up, mock_lock_exists, _):
+    with mock.patch('main.storage.Client') as mock_storage_client:
+      mock_lock_exists.return_value = False
+      test_attempted_files = iter([
+          types.SimpleNamespace(name='file1'),
+          types.SimpleNamespace(name='file3'),
+          types.SimpleNamespace(name='file2')
+      ])
+      test_completed_files = iter([])
+      mock_storage_client.return_value.list_blobs.side_effect = [
+          test_attempted_files, test_completed_files
+      ]
+
+      main.calculate_product_changes(self.event, self.context)
+
+      mock_clean_up.assert_called_with(
+          mock.ANY, mock.ANY, _TEST_LOCK_BUCKET,
+          f'{_TEST_GCP_PROJECT_ID}.{_TEST_BQ_DATASET}.{_TEST_ITEMS_TABLE}')
 
   @mock.patch('main._lock_exists')
   @mock.patch('main._ensure_all_files_were_imported')
@@ -311,6 +372,7 @@ class CalculateProductChangesTest(parameterized.TestCase):
           types.SimpleNamespace(expires=expected_expiration))
 
       main.calculate_product_changes(self.event, self.context)
+
       mock_bigquery_client.return_value.get_table.assert_called_with(
           f'{_TEST_GCP_PROJECT_ID}.{_TEST_BQ_DATASET}.{_TEST_ITEMS_TABLE}')
       mock_bigquery_client.return_value.update_table.assert_called_with(
@@ -319,9 +381,10 @@ class CalculateProductChangesTest(parameterized.TestCase):
   @mock.patch('main._lock_exists')
   @mock.patch('main._set_table_expiration_date')
   @mock.patch('main._cleanup_completed_filenames')
+  @mock.patch('main._archive_folder')
   def test_cleanup_completed_filenames_is_called_if_ensure_all_files_were_imported_was_successful(
-      self, mock_cleanup_completed_filenames, mock_set_table_expiration_date,
-      mock_lock_exists, _):
+      self, mock_archive_folder, mock_cleanup_completed_filenames,
+      mock_set_table_expiration_date, mock_lock_exists, _):
     del mock_set_table_expiration_date
     with mock.patch('main.storage.Client') as mock_storage_client:
       mock_lock_exists.return_value = False
@@ -338,6 +401,7 @@ class CalculateProductChangesTest(parameterized.TestCase):
       mock_storage_client.return_value.list_blobs.side_effect = [
           test_attempted_files, test_completed_files
       ]
+      mock_archive_folder.return_value = True
 
       main.calculate_product_changes(self.event, self.context)
 
@@ -373,3 +437,70 @@ class CalculateProductChangesTest(parameterized.TestCase):
       self.assertIn(
           f'Failed to delete {test_bucket_file_to_delete} in {_TEST_COMPLETED_FILES_BUCKET}.',
           mock_logging.output[0])
+
+  def test_archive_folder_calls_rename_blob(self, _):
+    with mock.patch('main.storage.Client') as mock_storage_client:
+      test_file_for_renaming = types.SimpleNamespace(name='file1.txt')
+      mock_list_blobs = mock_storage_client.list_blobs
+      mock_list_blobs.return_value = [test_file_for_renaming]
+      mock_get_bucket = mock_storage_client.get_bucket
+      expected_archive_destination = 'archive/2021_06_05_08_16_AM/file1.txt'
+
+      main._archive_folder(mock_storage_client, _TEST_FEED_BUCKET)
+
+      mock_get_bucket.assert_called_with(_TEST_FEED_BUCKET)
+      mock_get_bucket.return_value.rename_blob.assert_called_with(
+          test_file_for_renaming, expected_archive_destination)
+
+  def test_archive_folder_throws_exception_if_rename_blob_did_not_return_blob(
+      self, _):
+    with mock.patch(
+        'main.storage.Client') as mock_storage_client, self.assertRaises(
+            exceptions.GoogleAPICallError):
+      test_file_for_renaming = types.SimpleNamespace(name='file1.txt')
+      mock_list_blobs = mock_storage_client.list_blobs
+      mock_list_blobs.return_value = [test_file_for_renaming]
+      mock_get_bucket = mock_storage_client.get_bucket
+      mock_get_bucket.return_value.rename_blob.return_value = None
+
+      main._archive_folder(mock_storage_client, _TEST_FEED_BUCKET)
+
+  @mock.patch('main._lock_exists')
+  @mock.patch('main._lock_eof')
+  @mock.patch('main._ensure_all_files_were_imported')
+  @mock.patch('main._cleanup_completed_filenames')
+  def test_calculate_product_changes_logs_error_upon_archive_exception(
+      self, mock_cleanup_completed_filenames,
+      mock_ensure_all_files_were_imported, mock_lock_eof, mock_lock_exists, _):
+    with mock.patch('main.storage.Client') as mock_storage_client, mock.patch(
+        'main.bigquery.Client'), self.assertRaises(exceptions.NotFound):
+      del mock_lock_eof
+      mock_lock_exists.return_value = False
+      mock_cleanup_completed_filenames.return_value = True
+      mock_ensure_all_files_were_imported.return_value = (True, [])
+      mock_storage_client.return_value.get_bucket.side_effect = (
+          exceptions.NotFound('Bucket not found!'))
+
+      main.calculate_product_changes(self.event, self.context)
+
+  @mock.patch('main._lock_exists')
+  @mock.patch('main._lock_eof')
+  @mock.patch('main._ensure_all_files_were_imported')
+  @mock.patch('main._cleanup_completed_filenames')
+  @mock.patch('main._clean_up')
+  def test_calculate_product_changes_calls_clean_up_upon_archive_exception(
+      self, mock_cleanup_completed_filenames,
+      mock_ensure_all_files_were_imported, mock_lock_eof, mock_lock_exists,
+      mock_clean_up, _):
+    with mock.patch('main.storage.Client') as mock_storage_client, mock.patch(
+        'main.bigquery.Client'):
+      del mock_lock_eof
+      mock_lock_exists.return_value = False
+      mock_cleanup_completed_filenames.return_value = True
+      mock_ensure_all_files_were_imported.return_value = (True, [])
+      mock_storage_client.return_value.get_bucket.side_effect = (
+          exceptions.NotFound('Bucket not found!'))
+
+      main.calculate_product_changes(self.event, self.context)
+
+      mock_clean_up.assert_called()
