@@ -15,6 +15,8 @@
 
 """CF that triggers on GCS bucket upload to calculate product diffs."""
 import datetime
+import enum
+import json
 import logging
 import multiprocessing
 import os
@@ -26,11 +28,17 @@ from google.cloud import storage
 
 import pytz
 
+import queries
+
 _BUCKET_DELIMITER = '/'
 _COMPLETED_FILES_BUCKET = ''
 _ITEMS_TABLE_EXPIRATION_DURATION = 43200000  # 12 hours.
 _ITEMS_TABLE_NAME = 'items'
 _LOCK_FILE_NAME = 'EOF.lock'
+_MERCHANT_ID_COLUMN = 'google_merchant_id'
+_STREAMING_ITEMS_TABLE_NAME = 'streaming_items'
+_WRITE_DISPOSITION = enum.Enum('WRITE_DISPOSITION',
+                               'WRITE_TRUNCATE WRITE_APPEND WRITE_EMPTY')
 
 
 def calculate_product_changes(
@@ -93,10 +101,23 @@ def calculate_product_changes(
   else:
     print('File import check successful. Proceeding to cleanup completed '
           'filenames from Cloud Storage...')
-    cleanup_completed_files_successful = (
-        _cleanup_completed_filenames(storage_client))
-    if not cleanup_completed_files_successful:
-      logging.error(RuntimeError('Cleanup completed filenames failed.'))
+    try:
+      cleanup_completed_files_successful = (
+          _cleanup_completed_filenames(storage_client))
+      if not cleanup_completed_files_successful:
+        logging.error(
+            RuntimeError(
+                'Cleanup completed filenames failed. Cleaning up and exiting...'
+            ))
+        return
+    except Exception as cleanup_completed_files_error:  
+      # refex: disable=pytotw.037
+      logging.error(
+          RuntimeError(
+              'Cleanup completed filenames failed. Cleaning up and exiting...'),
+          cleanup_completed_files_error)
+      _clean_up(storage_client, bigquery_client, lock_bucket,
+                fully_qualified_items_table_name)
       return
 
   print(
@@ -109,18 +130,46 @@ def calculate_product_changes(
 
   try:
     _archive_folder(storage_client, feed_bucket)
-  except Exception as error:  
+  except Exception as archive_error:  
     # Stackdriver does not log errors to GCP unless using .error(Exception).
     # refex: disable=pytotw.037
     logging.error(
         RuntimeError(
-            'One or more errors occurred in archiving. Cleaning up...'), error)
+            'One or more errors occurred in archiving. Cleaning up...'),
+        archive_error)
     _clean_up(storage_client, bigquery_client, lock_bucket,
               fully_qualified_items_table_name)
     return
 
   print('All the feeds were loaded and archiving finished. Starting '
         'calculate_product_changes...')
+
+  try:
+    query_hash_statements, merchant_id_column = _parse_bigquery_config()
+  except Exception as parse_bigquery_config_error:  
+    # refex: disable=pytotw.037
+    logging.error(
+        RuntimeError('Parsing the config file failed.'),
+        parse_bigquery_config_error)
+    _clean_up(storage_client, bigquery_client, lock_bucket,
+              fully_qualified_items_table_name)
+    return
+
+  copy_item_batch_query = queries.COPY_ITEM_BATCH_QUERY.replace(
+      '{{COLUMNS_TO_HASH}}', query_hash_statements).replace(
+          '{{MC_COLUMN}}', merchant_id_column).replace('{{BQ_DATASET}}',
+                                                       bq_dataset)
+  try:
+    # Copy items table in order to add hashes and timestamps to it.
+    _run_materialize_job(bigquery_client, bq_dataset,
+                         _STREAMING_ITEMS_TABLE_NAME, gcp_project,
+                         copy_item_batch_query,
+                         _WRITE_DISPOSITION.WRITE_APPEND.name)
+  except Exception as copy_items_batch_error:  
+    logging.error(str(copy_items_batch_error))
+    _clean_up(storage_client, bigquery_client, lock_bucket,
+              fully_qualified_items_table_name)
+    return
 
 
 def _load_environment_variables() -> Tuple[str, str, str, str, str]:
@@ -321,3 +370,41 @@ def _clean_up(storage_client: storage.client.Client,
 
   if clean_items_table:
     bigquery_client.delete_table(items_table_name, not_found_ok=True)
+
+
+def _parse_bigquery_config() -> Tuple[str, str]:
+  """Validates, parses, and generates SQL from the BigQuery schema config file."""
+  schema_config_file = open('config.json',)
+  schema_config = json.load(schema_config_file)
+  config_exists = (schema_config and schema_config.get('mapping')) or False
+
+  if not config_exists or not isinstance(schema_config['mapping'], list):
+    logging.error(
+        'Unable to map any columns from the schema config. Aborting...')
+    raise exceptions.BadRequest('config.json could not be parsed.')
+
+  query_hash_statements = ', '.join([
+      f"IFNULL(CAST(Items.{mapping['bqColumn']} AS STRING), 'NULL')"
+      for mapping in schema_config['mapping']
+  ])
+
+  return (query_hash_statements, f'{_MERCHANT_ID_COLUMN},' if
+          (_MERCHANT_ID_COLUMN in query_hash_statements) else '')
+
+
+def _run_materialize_job(bigquery_client: bigquery.client.Client,
+                         bq_dataset: str, destination_table: str,
+                         gcp_project: str, query: str,
+                         write_disposition: str) -> None:
+  """Helper function that runs a query with the specified query job settings."""
+  print(f'Starting BigQuery job for {destination_table}...')
+  big_query_job_config = bigquery.QueryJobConfig(
+      destination=f'{gcp_project}.{bq_dataset}.{destination_table}',
+      write_disposition=write_disposition)
+
+  query_job = bigquery_client.query(
+      query,
+      job_config=big_query_job_config,
+  )
+  query_job.result()
+  print(f'BigQuery job finished for {destination_table}.')

@@ -28,6 +28,7 @@ import iso8601
 import pytz
 import schema
 
+_ARCHIVE_FOLDER_PREFIX = 'archive/'
 # Set the default expiration of this Cloud Function to 9 minutes.
 _EVENT_MAX_AGE_SECONDS = 540
 _ITEMS_TABLE_EXPIRATION_DURATION_MS = 43200000
@@ -52,6 +53,10 @@ def import_storage_file_into_big_query(
   Returns:
       None; the output is written to Cloud logging.
   """
+
+  # Do not run this function if the file is meant for archival.
+  if _ARCHIVE_FOLDER_PREFIX in event['name']:
+    return
 
   if _function_execution_exceeded_max_allowed_duration(context):
     return

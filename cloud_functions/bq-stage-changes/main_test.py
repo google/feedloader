@@ -36,6 +36,8 @@ _TEST_ITEMS_TABLE = main._ITEMS_TABLE_NAME
 _TEST_ITEMS_TABLE_EXPIRATION_DURATION = main._ITEMS_TABLE_EXPIRATION_DURATION
 _TEST_LOCK_BUCKET = 'lock-bucket'
 _TEST_LOCK_FILE_NAME = main._LOCK_FILE_NAME
+_TEST_MERCHANT_ID_SQL = f'{main._MERCHANT_ID_COLUMN},'
+_TEST_QUERY = 'SELECT * from test_items_table'
 _TEST_RETRIGGER_BUCKET = 'retrigger-bucket'
 _TEST_TIMESTAMP = '2021-06-05T08:16:25.183Z'
 
@@ -382,9 +384,13 @@ class CalculateProductChangesTest(parameterized.TestCase):
   @mock.patch('main._set_table_expiration_date')
   @mock.patch('main._cleanup_completed_filenames')
   @mock.patch('main._archive_folder')
+  @mock.patch('main._parse_bigquery_config')
+  @mock.patch('main._run_materialize_job')
   def test_cleanup_completed_filenames_is_called_if_ensure_all_files_were_imported_was_successful(
-      self, mock_archive_folder, mock_cleanup_completed_filenames,
+      self, mock_run_materialize_job, mock_parse_bigquery_config,
+      mock_archive_folder, mock_cleanup_completed_filenames,
       mock_set_table_expiration_date, mock_lock_exists, _):
+    del mock_run_materialize_job
     del mock_set_table_expiration_date
     with mock.patch('main.storage.Client') as mock_storage_client:
       mock_lock_exists.return_value = False
@@ -402,6 +408,7 @@ class CalculateProductChangesTest(parameterized.TestCase):
           test_attempted_files, test_completed_files
       ]
       mock_archive_folder.return_value = True
+      mock_parse_bigquery_config.return_value = (_TEST_QUERY, '')
 
       main.calculate_product_changes(self.event, self.context)
 
@@ -469,7 +476,7 @@ class CalculateProductChangesTest(parameterized.TestCase):
   @mock.patch('main._lock_eof')
   @mock.patch('main._ensure_all_files_were_imported')
   @mock.patch('main._cleanup_completed_filenames')
-  def test_calculate_product_changes_logs_error_upon_archive_exception(
+  def test_calculate_product_changes_raises_upon_archive_exception(
       self, mock_cleanup_completed_filenames,
       mock_ensure_all_files_were_imported, mock_lock_eof, mock_lock_exists, _):
     with mock.patch('main.storage.Client') as mock_storage_client, mock.patch(
@@ -489,9 +496,8 @@ class CalculateProductChangesTest(parameterized.TestCase):
   @mock.patch('main._cleanup_completed_filenames')
   @mock.patch('main._clean_up')
   def test_calculate_product_changes_calls_clean_up_upon_archive_exception(
-      self, mock_cleanup_completed_filenames,
-      mock_ensure_all_files_were_imported, mock_lock_eof, mock_lock_exists,
-      mock_clean_up, _):
+      self, mock_clean_up, mock_cleanup_completed_filenames,
+      mock_ensure_all_files_were_imported, mock_lock_eof, mock_lock_exists, _):
     with mock.patch('main.storage.Client') as mock_storage_client, mock.patch(
         'main.bigquery.Client'):
       del mock_lock_eof
@@ -504,3 +510,80 @@ class CalculateProductChangesTest(parameterized.TestCase):
       main.calculate_product_changes(self.event, self.context)
 
       mock_clean_up.assert_called()
+
+  def test_parse_config_returns_converted_config_and_mc_column(self, _):
+    test_config = {
+        'mapping': [
+            {
+                'csvHeader': 'google_merchant_id',
+                'bqColumn': 'google_merchant_id',
+                'columnType': 'INTEGER',
+            },
+            {
+                'csvHeader': 'title',
+                'bqColumn': 'title',
+                'columnType': 'STRING',
+            },
+        ],
+    }
+    expected_query_result = ('IFNULL(CAST(Items.google_merchant_id AS STRING), '
+                             '\'NULL\'), IFNULL(CAST(Items.title AS STRING), '
+                             '\'NULL\')')
+
+    with mock.patch('builtins.open', mock.mock_open(
+        read_data='')) as mock_file, mock.patch('json.load') as mock_json_load:
+      mock_json_load.return_value = test_config
+
+      (query_result, mc_column_result) = main._parse_bigquery_config()
+
+      mock_file.assert_called_with('config.json')
+      self.assertEqual(_TEST_MERCHANT_ID_SQL, mc_column_result)
+      self.assertEqual(expected_query_result, query_result)
+
+  def test_parse_config_raises_on_json_load_failure(self, _):
+    with mock.patch('builtins.open', mock.mock_open(read_data='')), mock.patch(
+        'json.load') as mock_json_load, self.assertRaises(
+            exceptions.GoogleAPICallError):
+      mock_json_load.return_value = None
+
+      main._parse_bigquery_config()
+
+  def test_run_materialize_job_calls_bigquery(self, _):
+    with mock.patch('main.bigquery.Client') as mock_bigquery_client:
+      test_destination_table = 'streaming_items'
+      test_write_disposition = 'WRITE_APPEND'
+
+      main._run_materialize_job(mock_bigquery_client, _TEST_BQ_DATASET,
+                                test_destination_table, _TEST_GCP_PROJECT_ID,
+                                _TEST_QUERY, test_write_disposition)
+
+      mock_bigquery_client.query.assert_called_with(
+          _TEST_QUERY, job_config=mock.ANY)
+
+  @mock.patch('main._lock_exists')
+  @mock.patch('main._lock_eof')
+  @mock.patch('main._ensure_all_files_were_imported')
+  @mock.patch('main._cleanup_completed_filenames')
+  @mock.patch('main._archive_folder')
+  @mock.patch('main._parse_bigquery_config')
+  @mock.patch('main._run_materialize_job')
+  @mock.patch('main._clean_up')
+  def test_calculate_product_changes_catches_and_logs_materialize_exception(
+      self, mock_clean_up, mock_run_materialize_job, mock_parse_bigquery_config,
+      mock_archive_folder, mock_cleanup_completed_filenames,
+      mock_ensure_all_files_were_imported, mock_lock_eof, mock_lock_exists, _):
+    with mock.patch('main.storage.Client'), mock.patch(
+        'main.bigquery.Client'), self.assertLogs(level='ERROR') as mock_logging:
+      del mock_archive_folder
+      del mock_lock_eof
+      mock_lock_exists.return_value = False
+      mock_cleanup_completed_filenames.return_value = True
+      mock_ensure_all_files_were_imported.return_value = (True, [])
+      mock_parse_bigquery_config.return_value = ('', '')
+      mock_run_materialize_job.side_effect = exceptions.GoogleAPICallError(
+          'Bigquery Query Failed.')
+
+      main.calculate_product_changes(self.event, self.context)
+
+      mock_clean_up.assert_called()
+      self.assertIn('Bigquery Query Failed.', mock_logging.output[0])
