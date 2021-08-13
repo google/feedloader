@@ -33,6 +33,10 @@ _TEST_FEED_BUCKET = 'feed-bucket'
 _TEST_FILENAME = 'EOF'
 _TEST_GCP_PROJECT_ID = 'test-project'
 _TEST_ITEMS_TABLE = main._ITEMS_TABLE_NAME
+_TEST_ITEMS_TO_DELETE_TABLE = main._ITEMS_TO_DELETE_TABLE_NAME
+_TEST_ITEMS_TO_PREVENT_EXPIRING_TABLE = main._ITEMS_TO_PREVENT_EXPIRING_TABLE_NAME
+_TEST_ITEMS_TO_UPSERT_TABLE = main._ITEMS_TO_UPSERT_TABLE_NAME
+_TEST_STREAMING_ITEMS_TABLE = main._STREAMING_ITEMS_TABLE_NAME
 _TEST_ITEMS_TABLE_EXPIRATION_DURATION = main._ITEMS_TABLE_EXPIRATION_DURATION
 _TEST_LOCK_BUCKET = 'lock-bucket'
 _TEST_LOCK_FILE_NAME = main._LOCK_FILE_NAME
@@ -139,6 +143,93 @@ class CalculateProductChangesTest(parameterized.TestCase):
 
       mock_lock_eof.assert_not_called()
       self.assertIn('An EOF.lock file was found', mock_logging.output[0])
+
+  @mock.patch('main._lock_exists')
+  @mock.patch('main._set_table_expiration_date')
+  @mock.patch('main._ensure_all_files_were_imported')
+  @mock.patch('main._cleanup_completed_filenames')
+  @mock.patch('main._table_exists')
+  def test_calculate_product_changes_checks_existence_of_required_tables(
+      self, mock_table_exists, mock_cleanup_completed_filenames,
+      mock_ensure_all_files_were_imported, mock_set_table_expiration_date,
+      mock_lock_exists, _):
+    del mock_set_table_expiration_date  # unused by this test
+    with mock.patch('main.storage.Client'), mock.patch('main.bigquery.Client'):
+      mock_lock_exists.return_value = False
+      mock_cleanup_completed_filenames.return_value = True
+      mock_ensure_all_files_were_imported.return_value = (True, [])
+      fully_qualified_items_table = f'{_TEST_GCP_PROJECT_ID}.{_TEST_BQ_DATASET}.{_TEST_ITEMS_TABLE}'
+      fully_qualified_items_to_delete_table_name = f'{_TEST_GCP_PROJECT_ID}.{_TEST_BQ_DATASET}.{_TEST_ITEMS_TO_DELETE_TABLE}'
+      fully_qualified_items_to_prevent_expiring_table_name = f'{_TEST_GCP_PROJECT_ID}.{_TEST_BQ_DATASET}.{_TEST_ITEMS_TO_PREVENT_EXPIRING_TABLE}'
+      fully_qualified_items_to_upsert_table_name = f'{_TEST_GCP_PROJECT_ID}.{_TEST_BQ_DATASET}.{_TEST_ITEMS_TO_UPSERT_TABLE}'
+      fully_qualified_streaming_items_table_name = f'{_TEST_GCP_PROJECT_ID}.{_TEST_BQ_DATASET}.{_TEST_STREAMING_ITEMS_TABLE}'
+      mock_table_exists.side_effect = [True] * 5
+
+      main.calculate_product_changes(self.event, self.context)
+
+      calls = [
+          mock.call(mock.ANY, fully_qualified_items_table),
+          mock.call(mock.ANY, fully_qualified_items_to_delete_table_name),
+          mock.call(mock.ANY,
+                    fully_qualified_items_to_prevent_expiring_table_name),
+          mock.call(mock.ANY, fully_qualified_items_to_upsert_table_name),
+          mock.call(mock.ANY, fully_qualified_streaming_items_table_name)
+      ]
+      mock_table_exists.assert_has_calls(calls)
+
+  @mock.patch('main._lock_exists')
+  @mock.patch('main._set_table_expiration_date')
+  @mock.patch('main._ensure_all_files_were_imported')
+  @mock.patch('main._cleanup_completed_filenames')
+  @mock.patch('main._clean_up')
+  @mock.patch('main._table_exists')
+  def test_calculate_product_changes_logs_error_when_any_required_table_is_missing(
+      self, mock_table_exists, mock_clean_up, mock_cleanup_completed_filenames,
+      mock_ensure_all_files_were_imported, mock_set_table_expiration_date,
+      mock_lock_exists, _):
+    del mock_set_table_expiration_date
+    with mock.patch('main.storage.Client'), mock.patch(
+        'main.bigquery.Client'), self.assertLogs(level='ERROR') as mock_logging:
+      mock_lock_exists.return_value = False
+      mock_cleanup_completed_filenames.return_value = True
+      mock_ensure_all_files_were_imported.return_value = (True, [])
+      mock_table_exists.return_value = False
+      fully_qualified_items_table = f'{_TEST_GCP_PROJECT_ID}.{_TEST_BQ_DATASET}.{_TEST_ITEMS_TABLE}'
+
+      main.calculate_product_changes(self.event, self.context)
+
+      self.assertIn('One or more necessary tables are missing.',
+                    mock_logging.output[0])
+      mock_clean_up.assert_called_with(mock.ANY, mock.ANY, _TEST_LOCK_BUCKET,
+                                       fully_qualified_items_table)
+
+  def test_table_exists_returns_false_when_table_is_missing(self, _):
+    with mock.patch('main.storage.Client'), mock.patch(
+        'main.bigquery.Client') as mock_bigquery_client, self.assertLogs(
+            level='ERROR') as mock_logging:
+      mock_get_table = mock_bigquery_client.get_table
+      mock_get_table.side_effect = exceptions.NotFound('404')
+      fully_qualified_items_table = f'{_TEST_GCP_PROJECT_ID}.{_TEST_BQ_DATASET}.{_TEST_ITEMS_TABLE}'
+
+      result = main._table_exists(mock_bigquery_client,
+                                  fully_qualified_items_table)
+
+      mock_get_table.assert_called_with(fully_qualified_items_table)
+      self.assertIn(f'Table {fully_qualified_items_table} must exist',
+                    mock_logging.output[0])
+      self.assertFalse(result)
+
+  def test_table_exists_returns_true_when_table_exists(self, _):
+    with mock.patch('main.storage.Client'), mock.patch(
+        'main.bigquery.Client') as mock_bigquery_client:
+      mock_get_table = mock_bigquery_client.get_table
+      fully_qualified_items_table = f'{_TEST_GCP_PROJECT_ID}.{_TEST_BQ_DATASET}.{_TEST_ITEMS_TABLE}'
+
+      result = main._table_exists(mock_bigquery_client,
+                                  fully_qualified_items_table)
+
+      mock_get_table.assert_called_with(fully_qualified_items_table)
+      self.assertTrue(result)
 
   @mock.patch('main._lock_exists')
   @mock.patch('main._trigger_reupload_of_missing_feed_files')

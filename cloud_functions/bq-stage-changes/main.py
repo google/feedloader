@@ -34,6 +34,10 @@ _BUCKET_DELIMITER = '/'
 _COMPLETED_FILES_BUCKET = ''
 _ITEMS_TABLE_EXPIRATION_DURATION = 43200000  # 12 hours.
 _ITEMS_TABLE_NAME = 'items'
+_ITEMS_TO_DELETE_TABLE_NAME = 'items_to_delete'
+_ITEMS_TO_PREVENT_EXPIRING_TABLE_NAME = 'items_to_prevent_expiring'
+_ITEMS_TO_UPSERT_TABLE_NAME = 'items_to_upsert'
+_STREAMING_ITEMS_TABLE_NAME = 'streaming_items'
 _LOCK_FILE_NAME = 'EOF.lock'
 _MERCHANT_ID_COLUMN = 'google_merchant_id'
 _STREAMING_ITEMS_TABLE_NAME = 'streaming_items'
@@ -58,6 +62,8 @@ def calculate_product_changes(
 
   Raises:
     RuntimeError: A dependency was not found, requiring this CF to exit.
+      The RuntimeError is not raised explicitly in this function but is default
+      behavior for any Cloud Function.
 
   Returns:
       None; the output is written to Cloud logging.
@@ -69,6 +75,14 @@ def calculate_product_changes(
 
   fully_qualified_items_table_name = (
       f'{gcp_project}.{bq_dataset}.{_ITEMS_TABLE_NAME}')
+  fully_qualified_items_to_delete_table_name = (
+      f'{gcp_project}.{bq_dataset}.{_ITEMS_TO_DELETE_TABLE_NAME}')
+  fully_qualified_items_to_prevent_expiring_table_name = (
+      f'{gcp_project}.{bq_dataset}.{_ITEMS_TO_PREVENT_EXPIRING_TABLE_NAME}')
+  fully_qualified_items_to_upsert_table_name = (
+      f'{gcp_project}.{bq_dataset}.{_ITEMS_TO_UPSERT_TABLE_NAME}')
+  fully_qualified_streaming_items_table_name = (
+      f'{gcp_project}.{bq_dataset}.{_STREAMING_ITEMS_TABLE_NAME}')
 
   if _eof_is_invalid(event):
     return
@@ -141,7 +155,28 @@ def calculate_product_changes(
               fully_qualified_items_table_name)
     return
 
-  print('All the feeds were loaded and archiving finished. Starting '
+  _set_table_expiration_date(bigquery_client, fully_qualified_items_table_name,
+                             _ITEMS_TABLE_EXPIRATION_DURATION)
+  print('All the feeds were loaded and archiving finished. Checking all the '
+        'required Big Query tables exist...')
+
+  table_list = [
+      fully_qualified_items_table_name,
+      fully_qualified_items_to_delete_table_name,
+      fully_qualified_items_to_prevent_expiring_table_name,
+      fully_qualified_items_to_upsert_table_name,
+      fully_qualified_streaming_items_table_name
+  ]
+  if not all(_table_exists(bigquery_client, table) for table in table_list):
+    logging.error(
+        RuntimeError(
+            'One or more necessary tables are missing. Make sure they exist. '
+            'Cleaning up...'))
+    _clean_up(storage_client, bigquery_client, lock_bucket,
+              fully_qualified_items_table_name)
+    return
+
+  print('Confirmed required Big Query tables existence. Starting '
         'calculate_product_changes...')
 
   try:
@@ -222,6 +257,21 @@ def _lock_eof(storage_client: storage.client.Client, eof_bucket_name: str,
   lock_destination = storage_client.get_bucket(lock_bucket)
   eof_bucket.copy_blob(eof_blob, lock_destination, new_name=_LOCK_FILE_NAME)
   eof_blob.delete()
+
+
+def _table_exists(bigquery_client: bigquery.client.Client,
+                  table_name: str) -> bool:
+  """Checks if BigQuery table exists or not."""
+  try:
+    bigquery_client.get_table(table_name)
+  except exceptions.NotFound:
+    logging.error(
+        exceptions.NotFound(
+            f'Table {table_name} must exist before running the product'
+            f' calculation function.'
+        ))
+    return False
+  return True
 
 
 def _ensure_all_files_were_imported(
