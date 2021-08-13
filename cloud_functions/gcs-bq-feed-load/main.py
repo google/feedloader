@@ -173,7 +173,6 @@ def _perform_big_query_load(
 
   big_query_job_config = bigquery.LoadJobConfig(
       allow_jagged_rows=True,
-      autodetect=True,
       encoding='UTF-8',
       field_delimiter='\t',
       quote_character='',
@@ -182,6 +181,7 @@ def _perform_big_query_load(
       source_format=bigquery.SourceFormat.CSV,
       time_partitioning=bigquery.table.TimePartitioning(
           type_='DAY', expiration_ms=_ITEMS_TABLE_EXPIRATION_DURATION_MS),
+      write_disposition='WRITE_APPEND',
   )
 
   gcs_uri = f'gs://{bucket_name}/{file_name}'
