@@ -74,10 +74,10 @@ bq mk -t \
   feed_data.items_expiration_tracking
 print_green "Finished recreating tables. Proceeding to upload feeds to GCS..."
 
-gsutil -m cp -j csv "${FEED_PATH}"*."${FEED_EXTENSION}" gs://"${GCP_PROJECT}"-feed
-print_green "Finished uploading feed files. You can check the logs at ${HYPERLINK}https://console.cloud.google.com/functions/details/us-central1/import_storage_file_into_big_query?project=${GCP_PROJECT}&tab=logs\ahttps://console.cloud.google.com/functions/details/us-central1/import_storage_file_into_big_query?project=${GCP_PROJECT}&tab=logs\a${HYPERLINK}. Pausing before uploading EOF..."
+gsutil -m cp -j csv "${FEED_PATH%/}"/*."${FEED_EXTENSION#.}" gs://"${GCP_PROJECT}"-feed
+print_green "Finished uploading feed files. You can check the logs at ${HYPERLINK}https://console.cloud.google.com/functions/details/us-central1/import_storage_file_into_big_query?project=${GCP_PROJECT}&tab=logs\ahttps://console.cloud.google.com/functions/details/us-central1/import_storage_file_into_big_query?project=${GCP_PROJECT}&tab=logs${HYPERLINK}\a. Pausing before uploading EOF..."
 sleep 200
 
 gsutil -m cp -j csv "${EOF_PATH}" gs://"${GCP_PROJECT}"-update
-print_green "Finished uploading EOF. You can check the logs at ${HYPERLINK}https://console.cloud.google.com/functions/details/us-central1/calculate_product_changes?project=${GCP_PROJECT}&tab=logs\ahttps://console.cloud.google.com/functions/details/us-central1/calculate_product_changes?project=${GCP_PROJECT}&tab=logs\a${HYPERLINK}."
+print_green "Finished uploading EOF. You can check the logs at ${HYPERLINK}https://console.cloud.google.com/functions/details/us-central1/calculate_product_changes?project=${GCP_PROJECT}&tab=logs\ahttps://console.cloud.google.com/functions/details/us-central1/calculate_product_changes?project=${GCP_PROJECT}&tab=logs${HYPERLINK}\a"
 print_green "Automated feed uploader completed."
