@@ -32,6 +32,8 @@ import queries
 
 _BUCKET_DELIMITER = '/'
 _COMPLETED_FILES_BUCKET = ''
+_DELETES_TABLE_NAME = 'items_to_delete'
+_EXPIRATION_TABLE_NAME = 'items_to_prevent_expiring'
 _ITEMS_TABLE_EXPIRATION_DURATION = 43200000  # 12 hours.
 _ITEMS_TABLE_NAME = 'items'
 _ITEMS_TO_DELETE_TABLE_NAME = 'items_to_delete'
@@ -41,6 +43,7 @@ _STREAMING_ITEMS_TABLE_NAME = 'streaming_items'
 _LOCK_FILE_NAME = 'EOF.lock'
 _MERCHANT_ID_COLUMN = 'google_merchant_id'
 _STREAMING_ITEMS_TABLE_NAME = 'streaming_items'
+_UPSERTS_TABLE_NAME = 'items_to_upsert'
 _WRITE_DISPOSITION = enum.Enum('WRITE_DISPOSITION',
                                'WRITE_TRUNCATE WRITE_APPEND WRITE_EMPTY')
 
@@ -70,8 +73,8 @@ def calculate_product_changes(
   """
   del context
 
-  bq_dataset, feed_bucket, gcp_project, lock_bucket, retrigger_bucket = (
-      _load_environment_variables())
+  (bq_dataset, expiration_threshold, feed_bucket, gcp_project, lock_bucket,
+   retrigger_bucket, timezone_utc_offset) = _load_environment_variables()
 
   fully_qualified_items_table_name = (
       f'{gcp_project}.{bq_dataset}.{_ITEMS_TABLE_NAME}')
@@ -206,12 +209,78 @@ def calculate_product_changes(
               fully_qualified_items_table_name)
     return
 
+  calculate_deletions_query = (
+      queries.CALCULATE_ITEMS_FOR_DELETION_QUERY.replace(
+          '{{BQ_DATASET}}', bq_dataset))
 
-def _load_environment_variables() -> Tuple[str, str, str, str, str]:
+  try:
+    # Find out how many items need to be deleted, if any.
+    _run_materialize_job(bigquery_client, bq_dataset, _DELETES_TABLE_NAME,
+                         gcp_project, calculate_deletions_query,
+                         _WRITE_DISPOSITION.WRITE_TRUNCATE.name)
+  except Exception as deletions_calculation_error:  
+    logging.error(str(deletions_calculation_error))
+    _clean_up(storage_client, bigquery_client, lock_bucket,
+              fully_qualified_items_table_name)
+    return
+
+  calculate_updates_query = queries.CALCULATE_ITEMS_FOR_UPDATE_QUERY.replace(
+      '{{COLUMNS_TO_HASH}}',
+      query_hash_statements).replace('{{BQ_DATASET}}', bq_dataset)
+
+  try:
+    # Start the "upserts" calculation. This is done with two separate queries,
+    # one for updates, one for inserts.
+    _run_materialize_job(bigquery_client, bq_dataset, _UPSERTS_TABLE_NAME,
+                         gcp_project, calculate_updates_query,
+                         _WRITE_DISPOSITION.WRITE_TRUNCATE.name)
+  except Exception as updates_calculation_error:  
+    logging.error(str(updates_calculation_error))
+    _clean_up(storage_client, bigquery_client, lock_bucket,
+              fully_qualified_items_table_name)
+    return
+
+  calculate_inserts_query = queries.CALCULATE_ITEMS_FOR_INSERTION_QUERY.replace(
+      '{{BQ_DATASET}}', bq_dataset)
+
+  try:
+    # Newly inserted items cannot rely on hashes used by calculate_updates_query
+    # to detect them, so append these results to the upserts table, too.
+    _run_materialize_job(bigquery_client, bq_dataset, _UPSERTS_TABLE_NAME,
+                         gcp_project, calculate_inserts_query,
+                         _WRITE_DISPOSITION.WRITE_APPEND.name)
+  except Exception as inserts_calculation_error:  
+    logging.error(str(inserts_calculation_error))
+    _clean_up(storage_client, bigquery_client, lock_bucket,
+              fully_qualified_items_table_name)
+    return
+
+  calculate_expirations_query = queries.GET_EXPIRING_ITEMS_QUERY.replace(
+      '{{BQ_DATASET}}', bq_dataset).replace('{{TIMEZONE_UTC_OFFSET}}',
+                                            timezone_utc_offset).replace(
+                                                '{{EXPIRATION_THRESHOLD}}',
+                                                expiration_threshold)
+
+  try:
+    # Populate the items to prevent expiring table with items that have not been
+    # touched in EXPIRATION_THRESHOLD days.
+    _run_materialize_job(bigquery_client, bq_dataset, _EXPIRATION_TABLE_NAME,
+                         gcp_project, calculate_expirations_query,
+                         _WRITE_DISPOSITION.WRITE_TRUNCATE.name)
+  except Exception as expirations_calculation_error:  
+    logging.error(str(expirations_calculation_error))
+    _clean_up(storage_client, bigquery_client, lock_bucket,
+              fully_qualified_items_table_name)
+    return
+
+
+def _load_environment_variables() -> Tuple[str, str, str, str, str, str, str]:
   """Helper function that loads all environment variables."""
   bq_dataset = os.environ.get('BQ_DATASET')
+  expiration_threshold = str(os.environ.get('EXPIRATION_THRESHOLD'))
   gcp_project = os.environ.get('GCP_PROJECT')
   retrigger_bucket = os.environ.get('RETRIGGER_BUCKET')
+  timezone_utc_offset = os.environ.get('TIMEZONE_UTC_OFFSET')
 
   # Strip out the bucket prefixes in case the user set their env var with one.
   completed_files_bucket = os.environ.get('COMPLETED_FILES_BUCKET').replace(
@@ -223,7 +292,8 @@ def _load_environment_variables() -> Tuple[str, str, str, str, str]:
   global _COMPLETED_FILES_BUCKET
   _COMPLETED_FILES_BUCKET = completed_files_bucket
 
-  return bq_dataset, feed_bucket, gcp_project, lock_bucket, retrigger_bucket
+  return (bq_dataset, expiration_threshold, feed_bucket, gcp_project,
+          lock_bucket, retrigger_bucket, timezone_utc_offset)
 
 
 def _eof_is_invalid(event: Dict[str, Any]) -> bool:

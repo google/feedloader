@@ -28,7 +28,10 @@ import main
 
 _TEST_BQ_DATASET = 'dataset'
 _TEST_COMPLETED_FILES_BUCKET = 'completed-bucket'
+_TEST_DELETES_TABLE_NAME = main._DELETES_TABLE_NAME
 _TEST_EOF_BUCKET = 'update-bucket'
+_TEST_EXPIRATIONS_TABLE_NAME = main._EXPIRATION_TABLE_NAME
+_TEST_EXPIRATION_THRESHOLD = '25'
 _TEST_FEED_BUCKET = 'feed-bucket'
 _TEST_FILENAME = 'EOF'
 _TEST_GCP_PROJECT_ID = 'test-project'
@@ -43,17 +46,23 @@ _TEST_LOCK_FILE_NAME = main._LOCK_FILE_NAME
 _TEST_MERCHANT_ID_SQL = f'{main._MERCHANT_ID_COLUMN},'
 _TEST_QUERY = 'SELECT * from test_items_table'
 _TEST_RETRIGGER_BUCKET = 'retrigger-bucket'
+_TEST_STREAMING_ITEMS_TABLE_NAME = main._STREAMING_ITEMS_TABLE_NAME
 _TEST_TIMESTAMP = '2021-06-05T08:16:25.183Z'
+_TEST_TIMEZONE_UTC_OFFSET = '+09:00'
+_TEST_UPSERTS_TABLE_NAME = main._UPSERTS_TABLE_NAME
+_TEST_WRITE_DISPOSITION = main._WRITE_DISPOSITION
 
 
 @mock.patch.dict(
     os.environ, {
         'BQ_DATASET': _TEST_BQ_DATASET,
         'COMPLETED_FILES_BUCKET': _TEST_COMPLETED_FILES_BUCKET,
+        'EXPIRATION_THRESHOLD': _TEST_EXPIRATION_THRESHOLD,
         'FEED_BUCKET': _TEST_FEED_BUCKET,
         'GCP_PROJECT': _TEST_GCP_PROJECT_ID,
         'LOCK_BUCKET': _TEST_LOCK_BUCKET,
         'RETRIGGER_BUCKET': _TEST_RETRIGGER_BUCKET,
+        'TIMEZONE_UTC_OFFSET': _TEST_TIMEZONE_UTC_OFFSET,
     })
 @mock.patch(
     'main._get_current_time_in_utc',
@@ -678,3 +687,41 @@ class CalculateProductChangesTest(parameterized.TestCase):
 
       mock_clean_up.assert_called()
       self.assertIn('Bigquery Query Failed.', mock_logging.output[0])
+
+  @mock.patch('main._lock_exists')
+  @mock.patch('main._lock_eof')
+  @mock.patch('main._ensure_all_files_were_imported')
+  @mock.patch('main._cleanup_completed_filenames')
+  @mock.patch('main._archive_folder')
+  @mock.patch('main._parse_bigquery_config')
+  @mock.patch('main._run_materialize_job')
+  def test_calculate_product_changes_calls_run_materialize_job_for_required_tables(
+      self, mock_run_materialize_job, mock_parse_bigquery_config,
+      mock_archive_folder, mock_cleanup_completed_filenames,
+      mock_ensure_all_files_were_imported, mock_lock_eof, mock_lock_exists, _):
+    with mock.patch('main.storage.Client'), mock.patch('main.bigquery.Client'):
+      del mock_archive_folder
+      del mock_lock_eof
+      mock_lock_exists.return_value = False
+      mock_cleanup_completed_filenames.return_value = True
+      mock_ensure_all_files_were_imported.return_value = (True, [])
+      mock_parse_bigquery_config.return_value = ('', '')
+
+      expected_run_materialize_job_calls = [
+          mock.call(mock.ANY, mock.ANY, _TEST_STREAMING_ITEMS_TABLE_NAME,
+                    mock.ANY, mock.ANY,
+                    _TEST_WRITE_DISPOSITION.WRITE_TRUNCATE.name),
+          mock.call(mock.ANY, mock.ANY, _TEST_DELETES_TABLE_NAME, mock.ANY,
+                    mock.ANY, _TEST_WRITE_DISPOSITION.WRITE_APPEND.name),
+          mock.call(mock.ANY, mock.ANY, _TEST_UPSERTS_TABLE_NAME, mock.ANY,
+                    mock.ANY, _TEST_WRITE_DISPOSITION.WRITE_TRUNCATE.name),
+          mock.call(mock.ANY, mock.ANY, _TEST_UPSERTS_TABLE_NAME, mock.ANY,
+                    mock.ANY, _TEST_WRITE_DISPOSITION.WRITE_APPEND.name),
+          mock.call(mock.ANY, mock.ANY, _TEST_EXPIRATIONS_TABLE_NAME, mock.ANY,
+                    mock.ANY, _TEST_WRITE_DISPOSITION.WRITE_TRUNCATE.name),
+      ]
+
+      main.calculate_product_changes(self.event, self.context)
+
+      for i, call in enumerate(expected_run_materialize_job_calls):
+        mock_run_materialize_job.call_args_list[i].assert_has_calls(call)
