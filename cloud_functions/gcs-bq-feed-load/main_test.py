@@ -97,8 +97,7 @@ class ImportStorageFileIntoBigQueryTest(parameterized.TestCase):
   @mock.patch.dict(os.environ, {'UPDATE_BUCKET': ''})
   def test_import_storage_file_into_big_query_reports_error_on_missing_update_bucket_env_var(
       self, mock_open_file, mock_get_current_time_in_utc):
-    del mock_open_file
-    del mock_get_current_time_in_utc
+    del mock_open_file, mock_get_current_time_in_utc  # unused by this test.
 
     with self.assertLogs(level='ERROR') as mock_logging:
       main.import_storage_file_into_big_query(self.event, self.context)
@@ -108,8 +107,7 @@ class ImportStorageFileIntoBigQueryTest(parameterized.TestCase):
 
   def test_import_storage_file_into_big_query_reports_error_on_nonexistent_bucket(
       self, mock_open_file, mock_get_current_time_in_utc):
-    del mock_open_file
-    del mock_get_current_time_in_utc
+    del mock_open_file, mock_get_current_time_in_utc  # unused by this test.
 
     with mock.patch(
         'main.storage.Client') as mock_storage_client, self.assertLogs(
@@ -128,10 +126,9 @@ class ImportStorageFileIntoBigQueryTest(parameterized.TestCase):
   def test_import_storage_file_into_big_query_validates_valid_schema(
       self, mock_save_imported_filename, mock_perform_bq_load,
       mock_file_to_import_exists, mock_open_file, mock_get_current_time_in_utc):
-    del mock_save_imported_filename
-    del mock_perform_bq_load
-    del mock_open_file
-    del mock_get_current_time_in_utc
+    # unused by this test.
+    del (mock_save_imported_filename, mock_perform_bq_load, mock_open_file,
+         mock_get_current_time_in_utc)
 
     with mock.patch('main.storage.Client') as mock_storage_client, mock.patch(
         'builtins.open',
@@ -151,10 +148,9 @@ class ImportStorageFileIntoBigQueryTest(parameterized.TestCase):
   def test_import_storage_file_into_big_query_returns_on_invalid_schema(
       self, mock_save_imported_filename, mock_perform_bq_load,
       mock_file_to_import_exists, mock_open_file, mock_get_current_time_in_utc):
-    del mock_save_imported_filename
-    del mock_perform_bq_load
-    del mock_open_file
-    del mock_get_current_time_in_utc
+    # unused by this test.
+    del (mock_save_imported_filename, mock_perform_bq_load, mock_open_file,
+         mock_get_current_time_in_utc)
 
     with mock.patch(
         'main.storage.Client') as mock_storage_client, self.assertLogs(
@@ -176,10 +172,9 @@ class ImportStorageFileIntoBigQueryTest(parameterized.TestCase):
   def test_import_storage_file_into_big_query_logs_file_import(
       self, mock_save_imported_filename, mock_perform_bq_load,
       mock_file_to_import_exists, mock_open_file, mock_get_current_time_in_utc):
-    del mock_save_imported_filename
-    del mock_perform_bq_load
-    del mock_open_file
-    del mock_get_current_time_in_utc
+    # unused by this test.
+    del (mock_save_imported_filename, mock_perform_bq_load, mock_open_file,
+         mock_get_current_time_in_utc)
 
     with mock.patch('main.storage.Client') as mock_storage_client, mock.patch(
         'sys.stdout', new_callable=io.StringIO) as mock_stdout:
@@ -198,10 +193,9 @@ class ImportStorageFileIntoBigQueryTest(parameterized.TestCase):
   def test_import_storage_file_into_big_query_calls_get_bucket(
       self, mock_save_imported_filename, mock_perform_bq_load,
       mock_file_to_import_exists, mock_open_file, mock_get_current_time_in_utc):
-    del mock_save_imported_filename
-    del mock_perform_bq_load
-    del mock_open_file
-    del mock_get_current_time_in_utc
+    # unused by this test.
+    del (mock_save_imported_filename, mock_perform_bq_load, mock_open_file,
+         mock_get_current_time_in_utc)
 
     with mock.patch('main.storage.Client') as mock_storage_client:
       mock_get_bucket = mock_storage_client.return_value.get_bucket
@@ -218,10 +212,9 @@ class ImportStorageFileIntoBigQueryTest(parameterized.TestCase):
   def test_import_storage_file_into_big_query_checks_for_eof(
       self, mock_save_imported_filename, mock_perform_bq_load,
       mock_file_to_import_exists, mock_open_file, mock_get_current_time_in_utc):
-    del mock_save_imported_filename
-    del mock_perform_bq_load
-    del mock_open_file
-    del mock_get_current_time_in_utc
+    # unused by this test.
+    del (mock_save_imported_filename, mock_perform_bq_load, mock_open_file,
+         mock_get_current_time_in_utc)
 
     with mock.patch('main.storage.Client') as mock_storage_client:
       mock_get_bucket = mock_storage_client.return_value.get_bucket.return_value
@@ -234,8 +227,7 @@ class ImportStorageFileIntoBigQueryTest(parameterized.TestCase):
 
   def test_import_storage_file_into_big_query_throws_error_if_eof_exists(
       self, mock_open_file, mock_get_current_time_in_utc):
-    del mock_open_file
-    del mock_get_current_time_in_utc
+    del mock_open_file, mock_get_current_time_in_utc  # unused by this test.
 
     with mock.patch('main.storage.Client'), self.assertLogs(
         level='ERROR') as mock_logging:
@@ -248,9 +240,9 @@ class ImportStorageFileIntoBigQueryTest(parameterized.TestCase):
   def test_import_storage_file_into_big_query_loads_data_to_bq_successfully(
       self, mock_save_imported_filename, mock_open_file,
       mock_get_current_time_in_utc):
-    del mock_save_imported_filename
-    del mock_open_file
-    del mock_get_current_time_in_utc
+    # unused by this test.
+    del (mock_save_imported_filename, mock_open_file,
+         mock_get_current_time_in_utc)
 
     with mock.patch('main.storage.Client') as mock_storage_client, mock.patch(
         'main.bigquery.Client') as mock_bigquery_client:
@@ -267,8 +259,7 @@ class ImportStorageFileIntoBigQueryTest(parameterized.TestCase):
 
   def test_import_storage_file_into_big_query_saves_filename_to_completed_bucket_after_bq_load(
       self, mock_open_file, mock_get_current_time_in_utc):
-    del mock_open_file
-    del mock_get_current_time_in_utc
+    del mock_open_file, mock_get_current_time_in_utc  # unused by this test.
 
     with mock.patch('main.storage.Client') as mock_storage_client, mock.patch(
         'main.bigquery.Client') as mock_bigquery_client, mock.patch(
@@ -282,16 +273,15 @@ class ImportStorageFileIntoBigQueryTest(parameterized.TestCase):
       mock_bigquery_client.return_value.load_table_from_uri.assert_called()
       self.assertIn(
           f'{_TEST_FILENAME} was saved into GCS bucket: '
-          f'{_TEST_COMPLETED_BUCKET}',
-          mock_stdout.getvalue())
+          f'{_TEST_COMPLETED_BUCKET}', mock_stdout.getvalue())
 
   @mock.patch('main._save_imported_filename_to_gcs')
   def test_import_storage_file_into_big_query_called_with_converted_schema_config(
       self, mock_save_imported_filename, mock_open_file,
       mock_get_current_time_in_utc):
-    del mock_save_imported_filename
-    del mock_open_file
-    del mock_get_current_time_in_utc
+    # unused by this test.
+    del (mock_save_imported_filename, mock_open_file,
+         mock_get_current_time_in_utc)
 
     expected_schema = [
         bigquery.SchemaField('item_id', 'STRING'),
@@ -312,7 +302,6 @@ class ImportStorageFileIntoBigQueryTest(parameterized.TestCase):
 
       mock_big_query_load_job_config.assert_called_with(
           allow_jagged_rows=True,
-          autodetect=True,
           encoding='UTF-8',
           field_delimiter='\t',
           quote_character='',
@@ -320,15 +309,16 @@ class ImportStorageFileIntoBigQueryTest(parameterized.TestCase):
           skip_leading_rows=1,
           source_format=bigquery.SourceFormat.CSV,
           time_partitioning=bigquery.table.TimePartitioning(
-              type_='DAY', expiration_ms=_ITEMS_TABLE_EXPIRATION_DURATION_MS))
+              type_='DAY', expiration_ms=_ITEMS_TABLE_EXPIRATION_DURATION_MS),
+          write_disposition='WRITE_APPEND')
 
   @mock.patch('main._save_imported_filename_to_gcs')
   def test_import_storage_file_into_big_query_catches_bq_load_exception(
       self, mock_save_imported_filename, mock_open_file,
       mock_get_current_time_in_utc):
-    del mock_save_imported_filename
-    del mock_open_file
-    del mock_get_current_time_in_utc
+    # unused by this test.
+    del (mock_save_imported_filename, mock_open_file,
+         mock_get_current_time_in_utc)
 
     test_job_id = 5678
 

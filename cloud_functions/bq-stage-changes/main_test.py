@@ -91,9 +91,7 @@ class CalculateProductChangesTest(parameterized.TestCase):
   def test_import_calculate_product_changes_locks_eof_file_when_no_lock_exists(
       self, mock_archive_folder, mock_clean_up, mock_set_table_expiration_date,
       mock_lock_exists, _):
-    del mock_clean_up
-    del mock_set_table_expiration_date
-
+    del mock_clean_up, mock_set_table_expiration_date  # unused by this test.
     with mock.patch('main.storage.Client') as mock_storage_client, mock.patch(
         'sys.stdout', new_callable=io.StringIO) as mock_stdout:
       mock_lock_exists.return_value = False
@@ -129,7 +127,7 @@ class CalculateProductChangesTest(parameterized.TestCase):
   @mock.patch('main._set_table_expiration_date')
   def test_import_calculate_product_changes_errors_out_when_trigger_file_is_not_empty(
       self, mock_set_table_expiration_date, mock_lock_exists, _):
-    del mock_set_table_expiration_date
+    del mock_set_table_expiration_date  # unused by this test.
     with mock.patch('main.storage.Client'), self.assertLogs(
         level='ERROR') as mock_logging:
       self.event['size'] = '1'
@@ -154,15 +152,15 @@ class CalculateProductChangesTest(parameterized.TestCase):
       self.assertIn('An EOF.lock file was found', mock_logging.output[0])
 
   @mock.patch('main._lock_exists')
-  @mock.patch('main._set_table_expiration_date')
   @mock.patch('main._ensure_all_files_were_imported')
   @mock.patch('main._cleanup_completed_filenames')
+  @mock.patch('main._set_table_expiration_date')
   @mock.patch('main._table_exists')
   def test_calculate_product_changes_checks_existence_of_required_tables(
-      self, mock_table_exists, mock_cleanup_completed_filenames,
-      mock_ensure_all_files_were_imported, mock_set_table_expiration_date,
+      self, mock_table_exists, mock_set_table_expiration_date,
+      mock_cleanup_completed_filenames, mock_ensure_all_files_were_imported,
       mock_lock_exists, _):
-    del mock_set_table_expiration_date  # unused by this test
+    del mock_set_table_expiration_date  # unused by this test.
     with mock.patch('main.storage.Client'), mock.patch('main.bigquery.Client'):
       mock_lock_exists.return_value = False
       mock_cleanup_completed_filenames.return_value = True
@@ -187,16 +185,16 @@ class CalculateProductChangesTest(parameterized.TestCase):
       mock_table_exists.assert_has_calls(calls)
 
   @mock.patch('main._lock_exists')
-  @mock.patch('main._set_table_expiration_date')
   @mock.patch('main._ensure_all_files_were_imported')
   @mock.patch('main._cleanup_completed_filenames')
-  @mock.patch('main._clean_up')
+  @mock.patch('main._set_table_expiration_date')
   @mock.patch('main._table_exists')
+  @mock.patch('main._clean_up')
   def test_calculate_product_changes_logs_error_when_any_required_table_is_missing(
-      self, mock_table_exists, mock_clean_up, mock_cleanup_completed_filenames,
-      mock_ensure_all_files_were_imported, mock_set_table_expiration_date,
+      self, mock_clean_up, mock_table_exists, mock_set_table_expiration_date,
+      mock_cleanup_completed_filenames, mock_ensure_all_files_were_imported,
       mock_lock_exists, _):
-    del mock_set_table_expiration_date
+    del mock_set_table_expiration_date  # unused by this test.
     with mock.patch('main.storage.Client'), mock.patch(
         'main.bigquery.Client'), self.assertLogs(level='ERROR') as mock_logging:
       mock_lock_exists.return_value = False
@@ -265,21 +263,21 @@ class CalculateProductChangesTest(parameterized.TestCase):
       mock_trigger_reupload_function.assert_called()
 
   @mock.patch('main._lock_exists')
-  @mock.patch('main._set_table_expiration_date')
   @mock.patch('main._cleanup_completed_filenames')
+  @mock.patch('main._set_table_expiration_date')
   @mock.patch('main._clean_up')
   @mock.patch('main._archive_folder')
+  @mock.patch('main._table_exists')
   def test_ensure_all_files_were_imported_returns_true_if_attempted_and_completed_file_sets_match(
-      self, mock_archive_folder, mock_clean_up,
-      mock_cleanup_completed_filenames, mock_set_table_expiration_date,
+      self, mock_table_exists, mock_archive_folder, mock_clean_up,
+      mock_set_table_expiration_date, mock_cleanup_completed_filenames,
       mock_lock_exists, _):
-    del mock_clean_up
-    del mock_set_table_expiration_date
-
+    del mock_clean_up, mock_set_table_expiration_date  # unused by this test.
     with mock.patch('main.storage.Client') as mock_storage_client, mock.patch(
         'sys.stdout', new_callable=io.StringIO) as mock_stdout:
       mock_lock_exists.return_value = False
       mock_cleanup_completed_filenames.return_value = True
+      mock_table_exists.return_value = True
       test_attempted_files = iter([
           types.SimpleNamespace(name='file1'),
           types.SimpleNamespace(name='file2'),
@@ -305,7 +303,7 @@ class CalculateProductChangesTest(parameterized.TestCase):
   def test_cleanup_completed_filenames_logs_error_if_it_returned_false(
       self, mock_set_table_expiration_date, mock_cleanup_completed_filenames,
       mock_lock_exists, _):
-    del mock_set_table_expiration_date
+    del mock_set_table_expiration_date  # unused by this test.
     with mock.patch(
         'main.storage.Client') as mock_storage_client, self.assertLogs(
             level='ERROR') as mock_logging:
@@ -363,7 +361,7 @@ class CalculateProductChangesTest(parameterized.TestCase):
   @mock.patch('main._clean_up')
   def test_ensure_all_files_were_imported_returns_logs_error_when_attempted_files_is_empty(
       self, mock_clean_up, mock_lock_exists, _):
-    del mock_clean_up
+    del mock_clean_up  # unused by this test.
     with mock.patch(
         'main.storage.Client') as mock_storage_client, self.assertLogs(
             level='ERROR') as mock_logging:
@@ -408,7 +406,7 @@ class CalculateProductChangesTest(parameterized.TestCase):
   @mock.patch('main._clean_up')
   def test_ensure_all_files_were_imported_returns_logs_error_when_completed_files_is_empty(
       self, mock_clean_up, mock_lock_exists, _):
-    del mock_clean_up
+    del mock_clean_up  # unused by this test.
     with mock.patch(
         'main.storage.Client') as mock_storage_client, self.assertLogs(
             level='ERROR') as mock_logging:
@@ -453,14 +451,16 @@ class CalculateProductChangesTest(parameterized.TestCase):
   @mock.patch('main._lock_exists')
   @mock.patch('main._ensure_all_files_were_imported')
   @mock.patch('main._cleanup_completed_filenames')
+  @mock.patch('main._table_exists')
   def test_set_table_expiration_date_sets_table_expiration(
-      self, mock_cleanup_completed_filenames,
+      self, mock_table_exists, mock_cleanup_completed_filenames,
       mock_ensure_all_files_were_imported, mock_lock_exists, _):
     with mock.patch('main.storage.Client'), mock.patch(
         'main.bigquery.Client') as mock_bigquery_client:
       mock_lock_exists.return_value = False
       mock_cleanup_completed_filenames.return_value = True
       mock_ensure_all_files_were_imported.return_value = (True, [])
+      mock_table_exists.return_value = True
       test_table_with_expiration = (
           types.SimpleNamespace(expires=datetime.datetime.now()))
       mock_bigquery_client.return_value.get_table.return_value = (
@@ -481,18 +481,20 @@ class CalculateProductChangesTest(parameterized.TestCase):
           expected_table_with_expiration, ['expires'])
 
   @mock.patch('main._lock_exists')
-  @mock.patch('main._set_table_expiration_date')
   @mock.patch('main._cleanup_completed_filenames')
+  @mock.patch('main._set_table_expiration_date')
   @mock.patch('main._archive_folder')
+  @mock.patch('main._table_exists')
   @mock.patch('main._parse_bigquery_config')
   @mock.patch('main._run_materialize_job')
   def test_cleanup_completed_filenames_is_called_if_ensure_all_files_were_imported_was_successful(
       self, mock_run_materialize_job, mock_parse_bigquery_config,
-      mock_archive_folder, mock_cleanup_completed_filenames,
-      mock_set_table_expiration_date, mock_lock_exists, _):
-    del mock_run_materialize_job
-    del mock_set_table_expiration_date
+      mock_table_exists, mock_archive_folder, mock_set_table_expiration_date,
+      mock_cleanup_completed_filenames, mock_lock_exists, _):
+    # unused by this test.
+    del mock_run_materialize_job, mock_set_table_expiration_date
     with mock.patch('main.storage.Client') as mock_storage_client:
+      mock_table_exists.return_value = True
       mock_lock_exists.return_value = False
       test_attempted_files = iter([
           types.SimpleNamespace(name='file1'),
@@ -581,7 +583,7 @@ class CalculateProductChangesTest(parameterized.TestCase):
       mock_ensure_all_files_were_imported, mock_lock_eof, mock_lock_exists, _):
     with mock.patch('main.storage.Client') as mock_storage_client, mock.patch(
         'main.bigquery.Client'), self.assertRaises(exceptions.NotFound):
-      del mock_lock_eof
+      del mock_lock_eof  # unused by this test.
       mock_lock_exists.return_value = False
       mock_cleanup_completed_filenames.return_value = True
       mock_ensure_all_files_were_imported.return_value = (True, [])
@@ -600,7 +602,7 @@ class CalculateProductChangesTest(parameterized.TestCase):
       mock_ensure_all_files_were_imported, mock_lock_eof, mock_lock_exists, _):
     with mock.patch('main.storage.Client') as mock_storage_client, mock.patch(
         'main.bigquery.Client'):
-      del mock_lock_eof
+      del mock_lock_eof  # unused by this test.
       mock_lock_exists.return_value = False
       mock_cleanup_completed_filenames.return_value = True
       mock_ensure_all_files_were_imported.return_value = (True, [])
@@ -674,8 +676,7 @@ class CalculateProductChangesTest(parameterized.TestCase):
       mock_ensure_all_files_were_imported, mock_lock_eof, mock_lock_exists, _):
     with mock.patch('main.storage.Client'), mock.patch(
         'main.bigquery.Client'), self.assertLogs(level='ERROR') as mock_logging:
-      del mock_archive_folder
-      del mock_lock_eof
+      del mock_archive_folder, mock_lock_eof  # unused by this test.
       mock_lock_exists.return_value = False
       mock_cleanup_completed_filenames.return_value = True
       mock_ensure_all_files_were_imported.return_value = (True, [])
@@ -700,8 +701,7 @@ class CalculateProductChangesTest(parameterized.TestCase):
       mock_archive_folder, mock_cleanup_completed_filenames,
       mock_ensure_all_files_were_imported, mock_lock_eof, mock_lock_exists, _):
     with mock.patch('main.storage.Client'), mock.patch('main.bigquery.Client'):
-      del mock_archive_folder
-      del mock_lock_eof
+      del mock_archive_folder, mock_lock_eof  # unused by this test.
       mock_lock_exists.return_value = False
       mock_cleanup_completed_filenames.return_value = True
       mock_ensure_all_files_were_imported.return_value = (True, [])

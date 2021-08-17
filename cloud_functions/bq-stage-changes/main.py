@@ -158,8 +158,6 @@ def calculate_product_changes(
               fully_qualified_items_table_name)
     return
 
-  _set_table_expiration_date(bigquery_client, fully_qualified_items_table_name,
-                             _ITEMS_TABLE_EXPIRATION_DURATION)
   print('All the feeds were loaded and archiving finished. Checking all the '
         'required Big Query tables exist...')
 
