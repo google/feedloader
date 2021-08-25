@@ -34,6 +34,7 @@ _BUCKET_DELIMITER = '/'
 _COMPLETED_FILES_BUCKET = ''
 _DELETES_TABLE_NAME = 'items_to_delete'
 _EXPIRATION_TABLE_NAME = 'items_to_prevent_expiring'
+_GAE_ACTIONS = enum.Enum('GAE_ACTIONS', 'upsert delete prevent_expiring')
 _ITEMS_TABLE_EXPIRATION_DURATION = 43200000  # 12 hours.
 _ITEMS_TABLE_NAME = 'items'
 _ITEMS_TO_DELETE_TABLE_NAME = 'items_to_delete'
@@ -271,6 +272,43 @@ def calculate_product_changes(
               fully_qualified_items_table_name)
     return
 
+  delete_count = _count_changes(
+      bigquery_client,
+      queries.COUNT_DELETES_QUERY.replace('{{BQ_DATASET}}', bq_dataset),
+      _GAE_ACTIONS.delete.name)
+  if delete_count < 0:
+    logging.error(
+        exceptions.OutOfRange(
+            'Delete count job failed. Skipping deletion processing.'))
+
+    # Zero-out the delete count so that processing can continue without doing
+    # any delete operations for expiration prevention purposes.
+    delete_count = 0
+
+  upsert_count = _count_changes(bigquery_client, queries.COUNT_UPSERTS_QUERY,
+                                _GAE_ACTIONS.upsert.name)
+  if upsert_count < 0:
+    logging.error(
+        exceptions.OutOfRange(
+            'Upsert count failed. Skipping upsert processing.'))
+
+    # Zero-out the upsert count so that processing can continue without doing
+    # any upsert operations.
+    upsert_count = 0
+
+    # Clean up the streaming_items table if upserts failed so that this run's
+    # items can be upserted in the future.
+    _run_dml_job(bigquery_client, queries.DELETE_LATEST_STREAMING_ITEMS)
+
+  expiring_count = _count_changes(bigquery_client, queries.COUNT_EXPIRING_QUERY,
+                                  _GAE_ACTIONS.prevent_expiring.name)
+  if expiring_count < 0:
+    logging.error(exceptions.OutOfRange('Expiring count failed.'))
+
+    # Zero-out the expiring count so that processing can continue without doing
+    # any expiration operations for expiration prevention purposes.
+    expiring_count = 0
+
 
 def _load_environment_variables() -> Tuple[str, str, str, str, str, str, str]:
   """Helper function that loads all environment variables."""
@@ -336,8 +374,7 @@ def _table_exists(bigquery_client: bigquery.client.Client,
     logging.error(
         exceptions.NotFound(
             f'Table {table_name} must exist before running the product'
-            f' calculation function.'
-        ))
+            f' calculation function.'))
     return False
   return True
 
@@ -465,7 +502,8 @@ def _archive_folder(storage_client: storage.client.Client,
   feed_bucket = storage_client.get_bucket(feed_bucket)
   current_datetime = _get_current_time_in_utc().strftime('%Y_%m_%d_%H_%M_%p')
   for feed_file_to_archive in feed_files:
-    archive_destination = f'archive/{current_datetime}/{feed_file_to_archive.name}'
+    archive_destination = (
+        f'archive/{current_datetime}/{feed_file_to_archive.name}')
     result = feed_bucket.rename_blob(feed_file_to_archive, archive_destination)
     if not result:
       raise exceptions.GoogleAPICallError(
@@ -525,4 +563,23 @@ def _run_materialize_job(bigquery_client: bigquery.client.Client,
       job_config=big_query_job_config,
   )
   query_job.result()
-  print(f'BigQuery job finished for {destination_table}.')
+  print(f'BigQuery materialize job finished for {destination_table}.')
+
+
+def _count_changes(bigquery_client, query, action) -> int:
+  """Runs a given query to count the number of changes for a given action."""
+  query_job = bigquery_client.query(query)
+  results = query_job.result()
+  if results:
+    changes_count = results[0].f0_
+    print(f'Number of rows to {action} in this run: {changes_count}')
+    return changes_count
+  return -1
+
+
+def _run_dml_job(bigquery_client, query) -> int:
+  """Helper function that runs a DML query in BigQuery."""
+  query_job = bigquery_client.query(query)
+  query_job.result()
+  print(f'DML query modified {query_job.num_dml_affected_rows} rows.')
+  return query_job.num_dml_affected_rows

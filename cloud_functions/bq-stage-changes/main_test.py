@@ -34,10 +34,12 @@ _TEST_EXPIRATIONS_TABLE_NAME = main._EXPIRATION_TABLE_NAME
 _TEST_EXPIRATION_THRESHOLD = '25'
 _TEST_FEED_BUCKET = 'feed-bucket'
 _TEST_FILENAME = 'EOF'
+_TEST_GAE_ACTIONS = main._GAE_ACTIONS
 _TEST_GCP_PROJECT_ID = 'test-project'
 _TEST_ITEMS_TABLE = main._ITEMS_TABLE_NAME
 _TEST_ITEMS_TO_DELETE_TABLE = main._ITEMS_TO_DELETE_TABLE_NAME
-_TEST_ITEMS_TO_PREVENT_EXPIRING_TABLE = main._ITEMS_TO_PREVENT_EXPIRING_TABLE_NAME
+_TEST_ITEMS_TO_PREVENT_EXPIRING_TABLE = (
+    main._ITEMS_TO_PREVENT_EXPIRING_TABLE_NAME)
 _TEST_ITEMS_TO_UPSERT_TABLE = main._ITEMS_TO_UPSERT_TABLE_NAME
 _TEST_STREAMING_ITEMS_TABLE = main._STREAMING_ITEMS_TABLE_NAME
 _TEST_ITEMS_TABLE_EXPIRATION_DURATION = main._ITEMS_TABLE_EXPIRATION_DURATION
@@ -165,11 +167,20 @@ class CalculateProductChangesTest(parameterized.TestCase):
       mock_lock_exists.return_value = False
       mock_cleanup_completed_filenames.return_value = True
       mock_ensure_all_files_were_imported.return_value = (True, [])
-      fully_qualified_items_table = f'{_TEST_GCP_PROJECT_ID}.{_TEST_BQ_DATASET}.{_TEST_ITEMS_TABLE}'
-      fully_qualified_items_to_delete_table_name = f'{_TEST_GCP_PROJECT_ID}.{_TEST_BQ_DATASET}.{_TEST_ITEMS_TO_DELETE_TABLE}'
-      fully_qualified_items_to_prevent_expiring_table_name = f'{_TEST_GCP_PROJECT_ID}.{_TEST_BQ_DATASET}.{_TEST_ITEMS_TO_PREVENT_EXPIRING_TABLE}'
-      fully_qualified_items_to_upsert_table_name = f'{_TEST_GCP_PROJECT_ID}.{_TEST_BQ_DATASET}.{_TEST_ITEMS_TO_UPSERT_TABLE}'
-      fully_qualified_streaming_items_table_name = f'{_TEST_GCP_PROJECT_ID}.{_TEST_BQ_DATASET}.{_TEST_STREAMING_ITEMS_TABLE}'
+      fully_qualified_items_table = (
+          f'{_TEST_GCP_PROJECT_ID}.{_TEST_BQ_DATASET}.{_TEST_ITEMS_TABLE}')
+      fully_qualified_items_to_delete_table_name = (
+          f'{_TEST_GCP_PROJECT_ID}.{_TEST_BQ_DATASET}.'
+          f'{_TEST_ITEMS_TO_DELETE_TABLE}')
+      fully_qualified_items_to_prevent_expiring_table_name = (
+          f'{_TEST_GCP_PROJECT_ID}.{_TEST_BQ_DATASET}.'
+          f'{_TEST_ITEMS_TO_PREVENT_EXPIRING_TABLE}')
+      fully_qualified_items_to_upsert_table_name = (
+          f'{_TEST_GCP_PROJECT_ID}.{_TEST_BQ_DATASET}.'
+          f'{_TEST_ITEMS_TO_UPSERT_TABLE}')
+      fully_qualified_streaming_items_table_name = (
+          f'{_TEST_GCP_PROJECT_ID}.{_TEST_BQ_DATASET}.'
+          f'{_TEST_STREAMING_ITEMS_TABLE}')
       mock_table_exists.side_effect = [True] * 5
 
       main.calculate_product_changes(self.event, self.context)
@@ -201,7 +212,8 @@ class CalculateProductChangesTest(parameterized.TestCase):
       mock_cleanup_completed_filenames.return_value = True
       mock_ensure_all_files_were_imported.return_value = (True, [])
       mock_table_exists.return_value = False
-      fully_qualified_items_table = f'{_TEST_GCP_PROJECT_ID}.{_TEST_BQ_DATASET}.{_TEST_ITEMS_TABLE}'
+      fully_qualified_items_table = (
+          f'{_TEST_GCP_PROJECT_ID}.{_TEST_BQ_DATASET}.{_TEST_ITEMS_TABLE}')
 
       main.calculate_product_changes(self.event, self.context)
 
@@ -216,7 +228,8 @@ class CalculateProductChangesTest(parameterized.TestCase):
             level='ERROR') as mock_logging:
       mock_get_table = mock_bigquery_client.get_table
       mock_get_table.side_effect = exceptions.NotFound('404')
-      fully_qualified_items_table = f'{_TEST_GCP_PROJECT_ID}.{_TEST_BQ_DATASET}.{_TEST_ITEMS_TABLE}'
+      fully_qualified_items_table = (
+          f'{_TEST_GCP_PROJECT_ID}.{_TEST_BQ_DATASET}.{_TEST_ITEMS_TABLE}')
 
       result = main._table_exists(mock_bigquery_client,
                                   fully_qualified_items_table)
@@ -230,7 +243,8 @@ class CalculateProductChangesTest(parameterized.TestCase):
     with mock.patch('main.storage.Client'), mock.patch(
         'main.bigquery.Client') as mock_bigquery_client:
       mock_get_table = mock_bigquery_client.get_table
-      fully_qualified_items_table = f'{_TEST_GCP_PROJECT_ID}.{_TEST_BQ_DATASET}.{_TEST_ITEMS_TABLE}'
+      fully_qualified_items_table = (
+          f'{_TEST_GCP_PROJECT_ID}.{_TEST_BQ_DATASET}.{_TEST_ITEMS_TABLE}')
 
       result = main._table_exists(mock_bigquery_client,
                                   fully_qualified_items_table)
@@ -487,10 +501,12 @@ class CalculateProductChangesTest(parameterized.TestCase):
   @mock.patch('main._table_exists')
   @mock.patch('main._parse_bigquery_config')
   @mock.patch('main._run_materialize_job')
+  @mock.patch('main._count_changes')
   def test_cleanup_completed_filenames_is_called_if_ensure_all_files_were_imported_was_successful(
-      self, mock_run_materialize_job, mock_parse_bigquery_config,
-      mock_table_exists, mock_archive_folder, mock_set_table_expiration_date,
-      mock_cleanup_completed_filenames, mock_lock_exists, _):
+      self, mock_count_changes, mock_run_materialize_job,
+      mock_parse_bigquery_config, mock_table_exists, mock_archive_folder,
+      mock_set_table_expiration_date, mock_cleanup_completed_filenames,
+      mock_lock_exists, _):
     # unused by this test.
     del mock_run_materialize_job, mock_set_table_expiration_date
     with mock.patch('main.storage.Client') as mock_storage_client:
@@ -511,6 +527,7 @@ class CalculateProductChangesTest(parameterized.TestCase):
       ]
       mock_archive_folder.return_value = True
       mock_parse_bigquery_config.return_value = (_TEST_QUERY, '')
+      mock_count_changes.side_effect = [0, 0, 0]
 
       main.calculate_product_changes(self.event, self.context)
 
@@ -544,8 +561,8 @@ class CalculateProductChangesTest(parameterized.TestCase):
       mock_get_bucket.return_value.delete_blob.assert_called_with(
           test_bucket_file_to_delete)
       self.assertIn(
-          f'Failed to delete {test_bucket_file_to_delete} in {_TEST_COMPLETED_FILES_BUCKET}.',
-          mock_logging.output[0])
+          f'Failed to delete {test_bucket_file_to_delete} in '
+          'f{_TEST_COMPLETED_FILES_BUCKET}.', mock_logging.output[0])
 
   def test_archive_folder_calls_rename_blob(self, _):
     with mock.patch('main.storage.Client') as mock_storage_client:
@@ -696,16 +713,19 @@ class CalculateProductChangesTest(parameterized.TestCase):
   @mock.patch('main._archive_folder')
   @mock.patch('main._parse_bigquery_config')
   @mock.patch('main._run_materialize_job')
+  @mock.patch('main._count_changes')
   def test_calculate_product_changes_calls_run_materialize_job_for_required_tables(
-      self, mock_run_materialize_job, mock_parse_bigquery_config,
-      mock_archive_folder, mock_cleanup_completed_filenames,
-      mock_ensure_all_files_were_imported, mock_lock_eof, mock_lock_exists, _):
+      self, mock_count_changes, mock_run_materialize_job,
+      mock_parse_bigquery_config, mock_archive_folder,
+      mock_cleanup_completed_filenames, mock_ensure_all_files_were_imported,
+      mock_lock_eof, mock_lock_exists, _):
     with mock.patch('main.storage.Client'), mock.patch('main.bigquery.Client'):
       del mock_archive_folder, mock_lock_eof  # unused by this test.
       mock_lock_exists.return_value = False
       mock_cleanup_completed_filenames.return_value = True
       mock_ensure_all_files_were_imported.return_value = (True, [])
       mock_parse_bigquery_config.return_value = ('', '')
+      mock_count_changes.side_effect = [0, 0, 0]
 
       expected_run_materialize_job_calls = [
           mock.call(mock.ANY, mock.ANY, _TEST_STREAMING_ITEMS_TABLE_NAME,
@@ -725,3 +745,100 @@ class CalculateProductChangesTest(parameterized.TestCase):
 
       for i, call in enumerate(expected_run_materialize_job_calls):
         mock_run_materialize_job.call_args_list[i].assert_has_calls(call)
+
+  def test_count_changes_calls_bigquery_and_returns_count(self, _):
+    with mock.patch('main.bigquery.Client') as mock_bigquery_client, mock.patch(
+        'sys.stdout', new_callable=io.StringIO) as mock_stdout:
+      test_count_deletes_query = 'SELECT COUNT(*) FROM items_to_delete'
+      test_action = _TEST_GAE_ACTIONS.delete.name
+      test_delete_count = 1
+      mock_query_job = mock_bigquery_client.query.return_value
+      mock_query_job.result.return_value = [
+          type('', (object,), {'f0_': test_delete_count})()
+      ]
+
+      main._count_changes(mock_bigquery_client, test_count_deletes_query,
+                          test_action)
+
+      mock_bigquery_client.query.assert_called_with(test_count_deletes_query)
+      self.assertIn(
+          f'Number of rows to {_TEST_GAE_ACTIONS.delete.name} in this run: '
+          'f{test_delete_count}', mock_stdout.getvalue())
+
+  def test_count_changes_returns_negative_one_if_results_was_empty(self, _):
+    with mock.patch('main.bigquery.Client') as mock_bigquery_client:
+      test_count_deletes_query = 'SELECT COUNT(*) FROM items_to_delete'
+      test_action = _TEST_GAE_ACTIONS.delete.name
+      mock_query_job = mock_bigquery_client.query.return_value
+      mock_query_job.result.return_value = []
+
+      count_changes_result = main._count_changes(mock_bigquery_client,
+                                                 test_count_deletes_query,
+                                                 test_action)
+
+      self.assertEqual(-1, count_changes_result)
+
+  @mock.patch('main._lock_exists')
+  @mock.patch('main._lock_eof')
+  @mock.patch('main._ensure_all_files_were_imported')
+  @mock.patch('main._cleanup_completed_filenames')
+  @mock.patch('main._archive_folder')
+  @mock.patch('main._parse_bigquery_config')
+  @mock.patch('main._run_materialize_job')
+  @mock.patch('main._count_changes')
+  def test_calculate_product_changes_counts_deletes_upserts_and_expirations(
+      self, mock_count_changes, mock_run_materialize_job,
+      mock_parse_bigquery_config, mock_archive_folder,
+      mock_cleanup_completed_filenames, mock_ensure_all_files_were_imported,
+      mock_lock_eof, mock_lock_exists, _):
+    with mock.patch('main.storage.Client'), mock.patch('main.bigquery.Client'):
+      # unused by this test.
+      del mock_run_materialize_job, mock_archive_folder, mock_lock_eof
+      mock_lock_exists.return_value = False
+      mock_cleanup_completed_filenames.return_value = True
+      mock_ensure_all_files_were_imported.return_value = (True, [])
+      mock_parse_bigquery_config.return_value = ('', '')
+      mock_count_changes.side_effect = [100, 1000, 10]
+
+      expected_count_changes_calls = [
+          mock.call(mock.ANY, mock.ANY, mock.ANY, mock.ANY,
+                    _TEST_GAE_ACTIONS.delete.name),
+          mock.call(mock.ANY, mock.ANY, mock.ANY, mock.ANY,
+                    _TEST_GAE_ACTIONS.upsert.name),
+          mock.call(mock.ANY, mock.ANY, mock.ANY, mock.ANY,
+                    _TEST_GAE_ACTIONS.prevent_expiring.name),
+      ]
+
+      main.calculate_product_changes(self.event, self.context)
+
+      for i, call in enumerate(expected_count_changes_calls):
+        mock_count_changes.call_args_list[i].assert_has_calls(call)
+
+  @mock.patch('main._lock_exists')
+  @mock.patch('main._lock_eof')
+  @mock.patch('main._ensure_all_files_were_imported')
+  @mock.patch('main._cleanup_completed_filenames')
+  @mock.patch('main._archive_folder')
+  @mock.patch('main._parse_bigquery_config')
+  @mock.patch('main._run_materialize_job')
+  @mock.patch('main._count_changes')
+  def test_calculate_product_changes_logs_errors_if_count_changes_fails(
+      self, mock_count_changes, mock_run_materialize_job,
+      mock_parse_bigquery_config, mock_archive_folder,
+      mock_cleanup_completed_filenames, mock_ensure_all_files_were_imported,
+      mock_lock_eof, mock_lock_exists, _):
+    with mock.patch('main.storage.Client'), mock.patch(
+        'main.bigquery.Client'), self.assertLogs(level='ERROR') as mock_logging:
+      # unused by this test.
+      del mock_run_materialize_job, mock_archive_folder, mock_lock_eof
+      mock_lock_exists.return_value = False
+      mock_cleanup_completed_filenames.return_value = True
+      mock_ensure_all_files_were_imported.return_value = (True, [])
+      mock_parse_bigquery_config.return_value = ('', '')
+      mock_count_changes.side_effect = [-1, -1, -1]
+
+      main.calculate_product_changes(self.event, self.context)
+
+      self.assertIn('Delete count job failed.', mock_logging.output[0])
+      self.assertIn('Upsert count failed.', mock_logging.output[1])
+      self.assertIn('Expiring count failed.', mock_logging.output[2])
