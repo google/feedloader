@@ -821,24 +821,24 @@ class CalculateProductChangesTest(parameterized.TestCase):
   @mock.patch('main._archive_folder')
   @mock.patch('main._parse_bigquery_config')
   @mock.patch('main._run_materialize_job')
-  @mock.patch('main._count_changes')
   def test_calculate_product_changes_logs_errors_if_count_changes_fails(
-      self, mock_count_changes, mock_run_materialize_job,
-      mock_parse_bigquery_config, mock_archive_folder,
-      mock_cleanup_completed_filenames, mock_ensure_all_files_were_imported,
-      mock_lock_eof, mock_lock_exists, _):
+      self, mock_run_materialize_job, mock_parse_bigquery_config,
+      mock_archive_folder, mock_cleanup_completed_filenames,
+      mock_ensure_all_files_were_imported, mock_lock_eof, mock_lock_exists, _):
     with mock.patch('main.storage.Client'), mock.patch(
-        'main.bigquery.Client'), self.assertLogs(level='ERROR') as mock_logging:
+        'main.bigquery.Client') as mock_bigquery_client, self.assertLogs(
+            level='ERROR') as mock_logging:
       # unused by this test.
       del mock_run_materialize_job, mock_archive_folder, mock_lock_eof
       mock_lock_exists.return_value = False
       mock_cleanup_completed_filenames.return_value = True
       mock_ensure_all_files_were_imported.return_value = (True, [])
       mock_parse_bigquery_config.return_value = ('', '')
-      mock_count_changes.side_effect = [-1, -1, -1]
+      mock_bigquery_client.query.return_value.result.side_effect = [[], [], []]
 
       main.calculate_product_changes(self.event, self.context)
 
-      self.assertIn('Delete count job failed.', mock_logging.output[0])
-      self.assertIn('Upsert count failed.', mock_logging.output[1])
-      self.assertIn('Expiring count failed.', mock_logging.output[2])
+      self.assertIn('delete count job failed.', mock_logging.output[0])
+      self.assertIn('upsert count job failed.', mock_logging.output[1])
+      self.assertIn('prevent_expiring count job failed.',
+                    mock_logging.output[2])

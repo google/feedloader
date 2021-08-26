@@ -20,7 +20,7 @@ LATEST_DATE_SUBQUERY = '''
   SELECT
     DISTINCT(import_datetime)
   FROM
-    {{BQ_DATASET}}.streaming_items
+    $bq_dataset.streaming_items
   ORDER BY
     import_datetime DESC
   LIMIT 1
@@ -32,17 +32,17 @@ LATEST_DATE_SUBQUERY = '''
 COPY_ITEM_BATCH_QUERY = '''
   SELECT
     DISTINCT(item_id),
-    {{MC_COLUMN}}
-    TO_BASE64(SHA1(CONCAT({{COLUMNS_TO_HASH}})))
+    $mc_column
+    TO_BASE64(SHA1(CONCAT($columns_to_hash)))
       AS hashed_content,
     CURRENT_DATETIME() AS import_datetime
   FROM
-    {{BQ_DATASET}}.items AS Items
+    $bq_dataset.items AS Items
 '''
 
 # This query determines which items no longer exist compared to the last
 # batch of imported items, and selects their IDs.
-CALCULATE_ITEMS_FOR_DELETION_QUERY = f'''
+CALCULATE_ITEMS_FOR_DELETION_QUERY = '''
   SELECT
     PreviousRun.item_id,
     PreviousRun.google_merchant_id
@@ -52,9 +52,9 @@ CALCULATE_ITEMS_FOR_DELETION_QUERY = f'''
         item_id,
         google_merchant_id
       FROM
-        {{BQ_DATASET}}.streaming_items
+        $bq_dataset.streaming_items
       WHERE
-        import_datetime = (${LATEST_DATE_SUBQUERY})
+        import_datetime = ($latest_date_subquery)
     ) AS CurrentRun
   RIGHT OUTER JOIN
     (
@@ -62,9 +62,9 @@ CALCULATE_ITEMS_FOR_DELETION_QUERY = f'''
         item_id,
         google_merchant_id
       FROM
-        {{BQ_DATASET}}.streaming_items
+        $bq_dataset.streaming_items
       WHERE
-        import_datetime = (${LATEST_DATE_SUBQUERY} OFFSET 1)
+        import_datetime = ($latest_date_subquery OFFSET 1)
     ) AS PreviousRun
   ON
     CurrentRun.item_id = PreviousRun.item_id
@@ -75,7 +75,7 @@ CALCULATE_ITEMS_FOR_DELETION_QUERY = f'''
 # This query counts how many items were staged for deletion and this number
 # will be passed onto GAE via PubSub.
 COUNT_DELETES_QUERY = '''
-  SELECT COUNT(*) FROM {{BQ_DATASET}}.items_to_delete
+  SELECT COUNT(*) FROM $bq_dataset.items_to_delete
 '''
 
 # This query determines if any items were changed in the current batch
@@ -84,9 +84,9 @@ CALCULATE_ITEMS_FOR_UPDATE_QUERY = '''
   SELECT
     Items.item_id
   FROM
-    {{BQ_DATASET}}.items AS Items
+    $bq_dataset.items AS Items
   INNER JOIN
-    {{BQ_DATASET}}.streaming_items AS Streaming
+    $bq_dataset.streaming_items AS Streaming
     ON
       Items.item_id = Streaming.item_id
     WHERE
@@ -94,20 +94,20 @@ CALCULATE_ITEMS_FOR_UPDATE_QUERY = '''
         SELECT DISTINCT
           import_datetime
         FROM
-          {{BQ_DATASET}}.streaming_items
+          $bq_dataset.streaming_items
         ORDER BY
           import_datetime DESC
         LIMIT 1
         OFFSET 1
       )
       AND (
-        Streaming.hashed_content != TO_BASE64(SHA1(CONCAT({{COLUMNS_TO_HASH}}}})))
+        Streaming.hashed_content != TO_BASE64(SHA1(CONCAT($columns_to_hash)))
       )
 '''
 
 # This query determines which items have not been seen compared to the last
 # batch of imported items, and selects their IDs.
-CALCULATE_ITEMS_FOR_INSERTION_QUERY = f'''
+CALCULATE_ITEMS_FOR_INSERTION_QUERY = '''
   SELECT
       CurrentRun.item_id
     FROM
@@ -115,18 +115,18 @@ CALCULATE_ITEMS_FOR_INSERTION_QUERY = f'''
         SELECT
           item_id
         FROM
-          {{BQ_DATASET}}.streaming_items
+          $bq_dataset.streaming_items
         WHERE
-          import_datetime = (${LATEST_DATE_SUBQUERY} OFFSET 1)
+          import_datetime = ($latest_date_subquery OFFSET 1)
       ) AS PreviousRun
     RIGHT OUTER JOIN
       (
         SELECT
           item_id
         FROM
-          {{BQ_DATASET}}.streaming_items
+          $bq_dataset.streaming_items
         WHERE
-          import_datetime = (${LATEST_DATE_SUBQUERY})
+          import_datetime = ($latest_date_subquery)
       ) AS CurrentRun
     ON
       CurrentRun.item_id = PreviousRun.item_id
@@ -137,7 +137,7 @@ CALCULATE_ITEMS_FOR_INSERTION_QUERY = f'''
 # This query counts how many items were staged for update/insert and this
 # number will be passed onto GAE via PubSub.
 COUNT_UPSERTS_QUERY = '''
-  SELECT COUNT(*) FROM {{BQ_DATASET}}.items_to_upsert
+  SELECT COUNT(*) FROM $bq_dataset.items_to_upsert
 '''
 
 # This query filters the items_expiration_tracking for aging items
@@ -150,26 +150,26 @@ GET_EXPIRING_ITEMS_QUERY = '''
   SELECT
     E.item_id
   FROM
-    {{BQ_DATASET}}.items_expiration_tracking AS E
+    $bq_dataset.items_expiration_tracking AS E
     INNER JOIN
-    {{BQ_DATASET}}.items AS I
+    $bq_dataset.items AS I
     USING(item_id)
   WHERE
-    DATE_DIFF(CURRENT_DATE('{{TIMEZONE_UTC_OFFSET}}'), E.last_touched_date, DAY)
-    >= {{EXPIRATION_THRESHOLD}}
-    AND E.item_id NOT IN (SELECT item_id FROM {{BQ_DATASET}}.items_to_upsert)
+    DATE_DIFF(CURRENT_DATE('$timezone_utc_offset'), E.last_touched_date, DAY)
+    >= $expiration_threshold
+    AND E.item_id NOT IN (SELECT item_id FROM $bq_dataset.items_to_upsert)
 '''
 
 # This query counts how many items were staged for expiration prevention and
 # this number will be passed onto GAE via PubSub.
 COUNT_EXPIRING_QUERY = '''
-  SELECT COUNT(*) FROM {{BQ_DATASET}}.items_to_prevent_expiring
+  SELECT COUNT(*) FROM $bq_dataset.items_to_prevent_expiring
 '''
 
 # This query deletes the latest imported run's items for the purpose of undoing
 # the latest import in the case where upsert threshold is crossed.
-DELETE_LATEST_STREAMING_ITEMS = f'''
-  DELETE FROM {{BQ_DATASET}}.streaming_items
+DELETE_LATEST_STREAMING_ITEMS = '''
+  DELETE FROM $bq_dataset.streaming_items
   WHERE
-    import_datetime = (${LATEST_DATE_SUBQUERY})
+    import_datetime = ($latest_date_subquery)
 '''

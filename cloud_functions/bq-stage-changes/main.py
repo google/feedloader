@@ -20,6 +20,7 @@ import json
 import logging
 import multiprocessing
 import os
+import string
 from typing import Any, Dict, List, Tuple
 
 from google.api_core import exceptions
@@ -192,10 +193,17 @@ def calculate_product_changes(
               fully_qualified_items_table_name)
     return
 
-  copy_item_batch_query = queries.COPY_ITEM_BATCH_QUERY.replace(
-      '{{COLUMNS_TO_HASH}}', query_hash_statements).replace(
-          '{{MC_COLUMN}}', merchant_id_column).replace('{{BQ_DATASET}}',
-                                                       bq_dataset)
+  latest_date_subquery_template = string.Template(queries.LATEST_DATE_SUBQUERY)
+  latest_date_subquery = latest_date_subquery_template.substitute(
+      bq_dataset=bq_dataset)
+
+  copy_item_batch_query_template = (
+      string.Template(queries.COPY_ITEM_BATCH_QUERY))
+  copy_item_batch_query = copy_item_batch_query_template.substitute(
+      mc_column=merchant_id_column,
+      columns_to_hash=query_hash_statements,
+      bq_dataset=bq_dataset)
+
   try:
     # Copy items table in order to add hashes and timestamps to it.
     _run_materialize_job(bigquery_client, bq_dataset,
@@ -208,9 +216,10 @@ def calculate_product_changes(
               fully_qualified_items_table_name)
     return
 
-  calculate_deletions_query = (
-      queries.CALCULATE_ITEMS_FOR_DELETION_QUERY.replace(
-          '{{BQ_DATASET}}', bq_dataset))
+  calculate_deletions_query_template = (
+      string.Template(queries.CALCULATE_ITEMS_FOR_DELETION_QUERY))
+  calculate_deletions_query = calculate_deletions_query_template.substitute(
+      bq_dataset=bq_dataset, latest_date_subquery=latest_date_subquery)
 
   try:
     # Find out how many items need to be deleted, if any.
@@ -223,9 +232,10 @@ def calculate_product_changes(
               fully_qualified_items_table_name)
     return
 
-  calculate_updates_query = queries.CALCULATE_ITEMS_FOR_UPDATE_QUERY.replace(
-      '{{COLUMNS_TO_HASH}}',
-      query_hash_statements).replace('{{BQ_DATASET}}', bq_dataset)
+  calculate_updates_query_template = (
+      string.Template(queries.CALCULATE_ITEMS_FOR_UPDATE_QUERY))
+  calculate_updates_query = calculate_updates_query_template.substitute(
+      bq_dataset=bq_dataset, columns_to_hash=query_hash_statements)
 
   try:
     # Start the "upserts" calculation. This is done with two separate queries,
@@ -239,8 +249,10 @@ def calculate_product_changes(
               fully_qualified_items_table_name)
     return
 
-  calculate_inserts_query = queries.CALCULATE_ITEMS_FOR_INSERTION_QUERY.replace(
-      '{{BQ_DATASET}}', bq_dataset)
+  calculate_inserts_query_template = (
+      string.Template(queries.CALCULATE_ITEMS_FOR_INSERTION_QUERY))
+  calculate_inserts_query = calculate_inserts_query_template.substitute(
+      bq_dataset=bq_dataset, latest_date_subquery=latest_date_subquery)
 
   try:
     # Newly inserted items cannot rely on hashes used by calculate_updates_query
@@ -254,11 +266,12 @@ def calculate_product_changes(
               fully_qualified_items_table_name)
     return
 
-  calculate_expirations_query = queries.GET_EXPIRING_ITEMS_QUERY.replace(
-      '{{BQ_DATASET}}', bq_dataset).replace('{{TIMEZONE_UTC_OFFSET}}',
-                                            timezone_utc_offset).replace(
-                                                '{{EXPIRATION_THRESHOLD}}',
-                                                expiration_threshold)
+  calculate_expirations_query_template = (
+      string.Template(queries.GET_EXPIRING_ITEMS_QUERY))
+  calculate_expirations_query = calculate_expirations_query_template.substitute(
+      bq_dataset=bq_dataset,
+      timezone_utc_offset=timezone_utc_offset,
+      expiration_threshold=expiration_threshold)
 
   try:
     # Populate the items to prevent expiring table with items that have not been
@@ -272,39 +285,43 @@ def calculate_product_changes(
               fully_qualified_items_table_name)
     return
 
-  delete_count = _count_changes(
-      bigquery_client,
-      queries.COUNT_DELETES_QUERY.replace('{{BQ_DATASET}}', bq_dataset),
-      _GAE_ACTIONS.delete.name)
+  count_deletes_query_template = (string.Template(queries.COUNT_DELETES_QUERY))
+  count_deletes_query = (
+      count_deletes_query_template.substitute(bq_dataset=bq_dataset))
+  delete_count = _count_changes(bigquery_client, count_deletes_query,
+                                _GAE_ACTIONS.delete.name)
   if delete_count < 0:
-    logging.error(
-        exceptions.OutOfRange(
-            'Delete count job failed. Skipping deletion processing.'))
-
     # Zero-out the delete count so that processing can continue without doing
     # any delete operations for expiration prevention purposes.
     delete_count = 0
 
-  upsert_count = _count_changes(bigquery_client, queries.COUNT_UPSERTS_QUERY,
+  count_upserts_query_template = (string.Template(queries.COUNT_UPSERTS_QUERY))
+  count_upserts_query = (
+      count_upserts_query_template.substitute(bq_dataset=bq_dataset))
+  upsert_count = _count_changes(bigquery_client, count_upserts_query,
                                 _GAE_ACTIONS.upsert.name)
   if upsert_count < 0:
-    logging.error(
-        exceptions.OutOfRange(
-            'Upsert count failed. Skipping upsert processing.'))
-
     # Zero-out the upsert count so that processing can continue without doing
     # any upsert operations.
     upsert_count = 0
 
     # Clean up the streaming_items table if upserts failed so that this run's
     # items can be upserted in the future.
-    _run_dml_job(bigquery_client, queries.DELETE_LATEST_STREAMING_ITEMS)
 
-  expiring_count = _count_changes(bigquery_client, queries.COUNT_EXPIRING_QUERY,
+    delete_latest_streaming_items_query_template = (
+        string.Template(queries.DELETE_LATEST_STREAMING_ITEMS))
+    delete_latest_streaming_items_query = (
+        delete_latest_streaming_items_query_template.substitute(
+            bq_dataset=bq_dataset, latest_date_subquery=latest_date_subquery))
+    _run_dml_job(bigquery_client, delete_latest_streaming_items_query)
+
+  count_expiring_query_template = (
+      string.Template(queries.COUNT_EXPIRING_QUERY))
+  count_expiring_query = (
+      count_expiring_query_template.substitute(bq_dataset=bq_dataset))
+  expiring_count = _count_changes(bigquery_client, count_expiring_query,
                                   _GAE_ACTIONS.prevent_expiring.name)
   if expiring_count < 0:
-    logging.error(exceptions.OutOfRange('Expiring count failed.'))
-
     # Zero-out the expiring count so that processing can continue without doing
     # any expiration operations for expiration prevention purposes.
     expiring_count = 0
@@ -569,11 +586,14 @@ def _run_materialize_job(bigquery_client: bigquery.client.Client,
 def _count_changes(bigquery_client, query, action) -> int:
   """Runs a given query to count the number of changes for a given action."""
   query_job = bigquery_client.query(query)
-  results = query_job.result()
-  if results:
-    changes_count = results[0].f0_
+  count_results = query_job.result()
+  for result in count_results:
+    changes_count = result.f0_
     print(f'Number of rows to {action} in this run: {changes_count}')
     return changes_count
+  logging.error(
+      exceptions.OutOfRange(
+          f'{action} count job failed. Skipping processing...'))
   return -1
 
 
