@@ -33,6 +33,7 @@ import queries
 
 _BUCKET_DELIMITER = '/'
 _COMPLETED_FILES_BUCKET = ''
+_DEFAULT_DELETES_THRESHOLD = 100000
 _DELETES_TABLE_NAME = 'items_to_delete'
 _EXPIRATION_TABLE_NAME = 'items_to_prevent_expiring'
 _GAE_ACTIONS = enum.Enum('GAE_ACTIONS', 'upsert delete prevent_expiring')
@@ -75,8 +76,15 @@ def calculate_product_changes(
   """
   del context
 
-  (bq_dataset, expiration_threshold, feed_bucket, gcp_project, lock_bucket,
-   retrigger_bucket, timezone_utc_offset) = _load_environment_variables()
+  (bq_dataset, deletes_threshold, expiration_threshold, feed_bucket,
+   gcp_project, lock_bucket, retrigger_bucket, timezone_utc_offset,
+   upserts_threshold) = _load_environment_variables()
+
+  if not deletes_threshold or deletes_threshold <= 0:
+    deletes_threshold = _DEFAULT_DELETES_THRESHOLD
+  if upserts_threshold and isinstance(upserts_threshold,
+                                      int) and upserts_threshold > 0:
+    upsert_set = True
 
   fully_qualified_items_table_name = (
       f'{gcp_project}.{bq_dataset}.{_ITEMS_TABLE_NAME}')
@@ -204,6 +212,12 @@ def calculate_product_changes(
       columns_to_hash=query_hash_statements,
       bq_dataset=bq_dataset)
 
+  delete_latest_streaming_items_query_template = (
+      string.Template(queries.DELETE_LATEST_STREAMING_ITEMS))
+  delete_latest_streaming_items_query = (
+      delete_latest_streaming_items_query_template.substitute(
+          bq_dataset=bq_dataset, latest_date_subquery=latest_date_subquery))
+
   try:
     # Copy items table in order to add hashes and timestamps to it.
     _run_materialize_job(bigquery_client, bq_dataset,
@@ -307,12 +321,6 @@ def calculate_product_changes(
 
     # Clean up the streaming_items table if upserts failed so that this run's
     # items can be upserted in the future.
-
-    delete_latest_streaming_items_query_template = (
-        string.Template(queries.DELETE_LATEST_STREAMING_ITEMS))
-    delete_latest_streaming_items_query = (
-        delete_latest_streaming_items_query_template.substitute(
-            bq_dataset=bq_dataset, latest_date_subquery=latest_date_subquery))
     _run_dml_job(bigquery_client, delete_latest_streaming_items_query)
 
   count_expiring_query_template = (
@@ -326,14 +334,41 @@ def calculate_product_changes(
     # any expiration operations for expiration prevention purposes.
     expiring_count = 0
 
+  if delete_count > deletes_threshold:
+    logging.error(
+        exceptions.FailedPrecondition(
+            f'Deletes count {delete_count} crossed deletes threshold of '
+            f'{deletes_threshold} items. Skipping delete processing...'))
 
-def _load_environment_variables() -> Tuple[str, str, str, str, str, str, str]:
+    # Zero-out the delete count so that processing can continue without doing
+    # any delete operations.
+    delete_count = 0
+
+  if upsert_set and upsert_count > upserts_threshold:
+    logging.error(
+        exceptions.FailedPrecondition(
+            f'Upserts count {upsert_count} crossed upserts threshold of '
+            f'{upserts_threshold} items. Skipping upsert processing...'))
+
+    # Zero-out the upsert count so that processing can continue without doing
+    # any upsert operations.
+    upsert_count = 0
+
+    # Clean up the streaming_items table so that this run's items can be
+    # upserted in the future.
+    _run_dml_job(bigquery_client, delete_latest_streaming_items_query)
+
+
+def _load_environment_variables(
+) -> Tuple[str, int, int, str, str, str, str, str, int]:
   """Helper function that loads all environment variables."""
   bq_dataset = os.environ.get('BQ_DATASET')
-  expiration_threshold = str(os.environ.get('EXPIRATION_THRESHOLD'))
+  deletes_threshold = int(os.environ.get('DELETES_THRESHOLD'))
+  expiration_threshold = int(os.environ.get('EXPIRATION_THRESHOLD'))
   gcp_project = os.environ.get('GCP_PROJECT')
   retrigger_bucket = os.environ.get('RETRIGGER_BUCKET')
   timezone_utc_offset = os.environ.get('TIMEZONE_UTC_OFFSET')
+  upserts_threshold = int(os.environ.get('UPSERTS_THRESHOLD'))
 
   # Strip out the bucket prefixes in case the user set their env var with one.
   completed_files_bucket = os.environ.get('COMPLETED_FILES_BUCKET').replace(
@@ -345,8 +380,9 @@ def _load_environment_variables() -> Tuple[str, str, str, str, str, str, str]:
   global _COMPLETED_FILES_BUCKET
   _COMPLETED_FILES_BUCKET = completed_files_bucket
 
-  return (bq_dataset, expiration_threshold, feed_bucket, gcp_project,
-          lock_bucket, retrigger_bucket, timezone_utc_offset)
+  return (bq_dataset, deletes_threshold, expiration_threshold, feed_bucket,
+          gcp_project, lock_bucket, retrigger_bucket, timezone_utc_offset,
+          upserts_threshold)
 
 
 def _eof_is_invalid(event: Dict[str, Any]) -> bool:

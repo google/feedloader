@@ -29,6 +29,7 @@ import main
 _TEST_BQ_DATASET = 'dataset'
 _TEST_COMPLETED_FILES_BUCKET = 'completed-bucket'
 _TEST_DELETES_TABLE_NAME = main._DELETES_TABLE_NAME
+_TEST_DELETES_THRESHOLD = '100000'
 _TEST_EOF_BUCKET = 'update-bucket'
 _TEST_EXPIRATIONS_TABLE_NAME = main._EXPIRATION_TABLE_NAME
 _TEST_EXPIRATION_THRESHOLD = '25'
@@ -52,6 +53,7 @@ _TEST_STREAMING_ITEMS_TABLE_NAME = main._STREAMING_ITEMS_TABLE_NAME
 _TEST_TIMESTAMP = '2021-06-05T08:16:25.183Z'
 _TEST_TIMEZONE_UTC_OFFSET = '+09:00'
 _TEST_UPSERTS_TABLE_NAME = main._UPSERTS_TABLE_NAME
+_TEST_UPSERTS_THRESHOLD = '100000'
 _TEST_WRITE_DISPOSITION = main._WRITE_DISPOSITION
 
 
@@ -59,12 +61,14 @@ _TEST_WRITE_DISPOSITION = main._WRITE_DISPOSITION
     os.environ, {
         'BQ_DATASET': _TEST_BQ_DATASET,
         'COMPLETED_FILES_BUCKET': _TEST_COMPLETED_FILES_BUCKET,
+        'DELETES_THRESHOLD': _TEST_DELETES_THRESHOLD,
         'EXPIRATION_THRESHOLD': _TEST_EXPIRATION_THRESHOLD,
         'FEED_BUCKET': _TEST_FEED_BUCKET,
         'GCP_PROJECT': _TEST_GCP_PROJECT_ID,
         'LOCK_BUCKET': _TEST_LOCK_BUCKET,
         'RETRIGGER_BUCKET': _TEST_RETRIGGER_BUCKET,
         'TIMEZONE_UTC_OFFSET': _TEST_TIMEZONE_UTC_OFFSET,
+        'UPSERTS_THRESHOLD': _TEST_UPSERTS_THRESHOLD,
     })
 @mock.patch(
     'main._get_current_time_in_utc',
@@ -562,7 +566,7 @@ class CalculateProductChangesTest(parameterized.TestCase):
           test_bucket_file_to_delete)
       self.assertIn(
           f'Failed to delete {test_bucket_file_to_delete} in '
-          'f{_TEST_COMPLETED_FILES_BUCKET}.', mock_logging.output[0])
+          f'{_TEST_COMPLETED_FILES_BUCKET}.', mock_logging.output[0])
 
   def test_archive_folder_calls_rename_blob(self, _):
     with mock.patch('main.storage.Client') as mock_storage_client:
@@ -763,7 +767,7 @@ class CalculateProductChangesTest(parameterized.TestCase):
       mock_bigquery_client.query.assert_called_with(test_count_deletes_query)
       self.assertIn(
           f'Number of rows to {_TEST_GAE_ACTIONS.delete.name} in this run: '
-          'f{test_delete_count}', mock_stdout.getvalue())
+          f'{test_delete_count}', mock_stdout.getvalue())
 
   def test_count_changes_returns_negative_one_if_results_was_empty(self, _):
     with mock.patch('main.bigquery.Client') as mock_bigquery_client:
@@ -842,3 +846,63 @@ class CalculateProductChangesTest(parameterized.TestCase):
       self.assertIn('upsert count job failed.', mock_logging.output[1])
       self.assertIn('prevent_expiring count job failed.',
                     mock_logging.output[2])
+
+  @mock.patch('main._lock_exists')
+  @mock.patch('main._lock_eof')
+  @mock.patch('main._ensure_all_files_were_imported')
+  @mock.patch('main._cleanup_completed_filenames')
+  @mock.patch('main._archive_folder')
+  @mock.patch('main._parse_bigquery_config')
+  @mock.patch('main._run_materialize_job')
+  @mock.patch('main._count_changes')
+  def test_calculate_product_changes_logs_error_if_deletes_threshold_crossed(
+      self, mock_count_changes, mock_run_materialize_job,
+      mock_parse_bigquery_config, mock_archive_folder,
+      mock_cleanup_completed_filenames, mock_ensure_all_files_were_imported,
+      mock_lock_eof, mock_lock_exists, _):
+    with mock.patch('main.storage.Client'), mock.patch(
+        'main.bigquery.Client'), self.assertLogs(level='ERROR') as mock_logging:
+      # unused by this test.
+      del mock_run_materialize_job, mock_archive_folder, mock_lock_eof
+      test_deletes_count = int(_TEST_DELETES_THRESHOLD) + 1
+      mock_lock_exists.return_value = False
+      mock_cleanup_completed_filenames.return_value = True
+      mock_ensure_all_files_were_imported.return_value = (True, [])
+      mock_parse_bigquery_config.return_value = ('', '')
+      mock_count_changes.side_effect = [test_deletes_count, 0, 0]
+
+      main.calculate_product_changes(self.event, self.context)
+
+      self.assertIn(
+          f'Deletes count {test_deletes_count} crossed deletes threshold of '
+          f'{_TEST_DELETES_THRESHOLD}', mock_logging.output[0])
+
+  @mock.patch('main._lock_exists')
+  @mock.patch('main._lock_eof')
+  @mock.patch('main._ensure_all_files_were_imported')
+  @mock.patch('main._cleanup_completed_filenames')
+  @mock.patch('main._archive_folder')
+  @mock.patch('main._parse_bigquery_config')
+  @mock.patch('main._run_materialize_job')
+  @mock.patch('main._count_changes')
+  def test_calculate_product_changes_logs_error_if_upserts_threshold_crossed(
+      self, mock_count_changes, mock_run_materialize_job,
+      mock_parse_bigquery_config, mock_archive_folder,
+      mock_cleanup_completed_filenames, mock_ensure_all_files_were_imported,
+      mock_lock_eof, mock_lock_exists, _):
+    with mock.patch('main.storage.Client'), mock.patch(
+        'main.bigquery.Client'), self.assertLogs(level='ERROR') as mock_logging:
+      # unused by this test.
+      del mock_run_materialize_job, mock_archive_folder, mock_lock_eof
+      test_upserts_count = int(_TEST_UPSERTS_THRESHOLD) + 1
+      mock_lock_exists.return_value = False
+      mock_cleanup_completed_filenames.return_value = True
+      mock_ensure_all_files_were_imported.return_value = (True, [])
+      mock_parse_bigquery_config.return_value = ('', '')
+      mock_count_changes.side_effect = [0, test_upserts_count, 0]
+
+      main.calculate_product_changes(self.event, self.context)
+
+      self.assertIn(
+          f'Upserts count {test_upserts_count} crossed upserts threshold of '
+          f'{_TEST_UPSERTS_THRESHOLD}', mock_logging.output[0])
