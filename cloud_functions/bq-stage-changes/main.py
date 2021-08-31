@@ -26,6 +26,7 @@ from typing import Any, Dict, List, Tuple
 from google.api_core import exceptions
 from google.cloud import bigquery
 from google.cloud import storage
+from google.cloud import tasks_v2
 
 import pytz
 
@@ -46,6 +47,8 @@ _STREAMING_ITEMS_TABLE_NAME = 'streaming_items'
 _LOCK_FILE_NAME = 'EOF.lock'
 _MERCHANT_ID_COLUMN = 'google_merchant_id'
 _STREAMING_ITEMS_TABLE_NAME = 'streaming_items'
+_TASK_QUEUE_LOCATION = 'us-central1'
+_TASK_QUEUE_NAME = 'trigger-initiator'
 _UPSERTS_TABLE_NAME = 'items_to_upsert'
 _WRITE_DISPOSITION = enum.Enum('WRITE_DISPOSITION',
                                'WRITE_TRUNCATE WRITE_APPEND WRITE_EMPTY')
@@ -358,6 +361,30 @@ def calculate_product_changes(
     # upserted in the future.
     _run_dml_job(bigquery_client, delete_latest_streaming_items_query)
 
+  # Trigger AppEngine with a Task Queue task containing the query results.
+  task_payload = {
+      'deleteCount': delete_count,
+      'expiringCount': expiring_count,
+      'upsertCount': upsert_count,
+  }
+
+  create_task_is_successful = _create_task(gcp_project, _TASK_QUEUE_NAME,
+                                           _TASK_QUEUE_LOCATION, task_payload)
+  if not create_task_is_successful:
+    _clean_up(storage_client, bigquery_client, lock_bucket,
+              fully_qualified_items_table_name)
+
+    # Clean up the streaming_items table so that this run's items can be
+    # upserted in the future.
+    _run_dml_job(bigquery_client, delete_latest_streaming_items_query)
+    return
+  _clean_up(
+      storage_client,
+      bigquery_client,
+      lock_bucket,
+      fully_qualified_items_table_name,
+      clean_items_table=False)
+
 
 def _load_environment_variables(
 ) -> Tuple[str, int, int, str, str, str, str, str, int]:
@@ -619,7 +646,8 @@ def _run_materialize_job(bigquery_client: bigquery.client.Client,
   print(f'BigQuery materialize job finished for {destination_table}.')
 
 
-def _count_changes(bigquery_client, query, action) -> int:
+def _count_changes(bigquery_client: bigquery.client.Client, query: str,
+                   action: str) -> int:
   """Runs a given query to count the number of changes for a given action."""
   query_job = bigquery_client.query(query)
   count_results = query_job.result()
@@ -633,9 +661,62 @@ def _count_changes(bigquery_client, query, action) -> int:
   return -1
 
 
-def _run_dml_job(bigquery_client, query) -> int:
+def _run_dml_job(bigquery_client: bigquery.client.Client, query: str) -> int:
   """Helper function that runs a DML query in BigQuery."""
   query_job = bigquery_client.query(query)
   query_job.result()
   print(f'DML query modified {query_job.num_dml_affected_rows} rows.')
   return query_job.num_dml_affected_rows
+
+
+def _create_task(project_id: str, queue_name: str, location: str,
+                 payload: Dict[str, Any]) -> bool:
+  """Creates a Task on the provided Task Queue to start App Engine.
+
+  Args:
+    project_id: The GCP project ID.
+    queue_name: The name of the Task Queue to send the payload to.
+    location: The GCP location of the Task Queue to send the payload to.
+    payload: The data to send inside the task to the Task Queue.
+
+  Returns:
+    True if the task was able to be sent to GCP, otherwise false.
+  """
+  if payload is None or not isinstance(payload, dict):
+    return False
+
+  cloud_tasks_client = tasks_v2.CloudTasksClient()
+  parent = cloud_tasks_client.queue_path(project_id, location, queue_name)
+  payload_json = json.dumps(payload)
+
+  # The API expects a payload of type bytes.
+  encoded_payload = payload_json.encode()
+  task = {
+      'app_engine_http_request': {
+          'http_method': tasks_v2.HttpMethod.POST,
+          'relative_uri': '/start',
+          'headers': {
+              'Content-type': 'application/json'
+          },
+          'body': encoded_payload
+      }
+  }
+
+  print(f'Sending task: {task}')
+  try:
+    response = cloud_tasks_client.create_task(parent=parent, task=task)
+
+    if not response or not response.name:
+      logging.error(
+          exceptions.GoogleAPICallError(
+              f'Task creation returned unexpected response: {response}'))
+      return False
+
+    print(f'Created task with name: {response.name}. Full response was: '
+          f'{response}')
+  except Exception as error:  
+    logging.error(
+        exceptions.GoogleAPICallError(
+            f'Error occurred when creating a Task to start GAE: {error}'))
+    return False
+  return True

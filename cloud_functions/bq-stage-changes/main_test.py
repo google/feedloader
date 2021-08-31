@@ -18,6 +18,7 @@ import datetime
 import io
 import os
 import types
+from typing import List, Tuple
 import unittest.mock as mock
 
 from absl.testing import parameterized
@@ -50,11 +51,15 @@ _TEST_MERCHANT_ID_SQL = f'{main._MERCHANT_ID_COLUMN},'
 _TEST_QUERY = 'SELECT * from test_items_table'
 _TEST_RETRIGGER_BUCKET = 'retrigger-bucket'
 _TEST_STREAMING_ITEMS_TABLE_NAME = main._STREAMING_ITEMS_TABLE_NAME
+_TEST_TASK_QUEUE_LOCATION = main._TASK_QUEUE_LOCATION
+_TEST_TASK_QUEUE_NAME = main._TASK_QUEUE_NAME
 _TEST_TIMESTAMP = '2021-06-05T08:16:25.183Z'
 _TEST_TIMEZONE_UTC_OFFSET = '+09:00'
 _TEST_UPSERTS_TABLE_NAME = main._UPSERTS_TABLE_NAME
 _TEST_UPSERTS_THRESHOLD = '100000'
 _TEST_WRITE_DISPOSITION = main._WRITE_DISPOSITION
+_TEST_FULLY_QUALIFIED_ITEMS_TABLE = (
+    f'{_TEST_GCP_PROJECT_ID}.{_TEST_BQ_DATASET}.{_TEST_ITEMS_TABLE}')
 
 
 @mock.patch.dict(
@@ -171,8 +176,6 @@ class CalculateProductChangesTest(parameterized.TestCase):
       mock_lock_exists.return_value = False
       mock_cleanup_completed_filenames.return_value = True
       mock_ensure_all_files_were_imported.return_value = (True, [])
-      fully_qualified_items_table = (
-          f'{_TEST_GCP_PROJECT_ID}.{_TEST_BQ_DATASET}.{_TEST_ITEMS_TABLE}')
       fully_qualified_items_to_delete_table_name = (
           f'{_TEST_GCP_PROJECT_ID}.{_TEST_BQ_DATASET}.'
           f'{_TEST_ITEMS_TO_DELETE_TABLE}')
@@ -190,7 +193,7 @@ class CalculateProductChangesTest(parameterized.TestCase):
       main.calculate_product_changes(self.event, self.context)
 
       calls = [
-          mock.call(mock.ANY, fully_qualified_items_table),
+          mock.call(mock.ANY, _TEST_FULLY_QUALIFIED_ITEMS_TABLE),
           mock.call(mock.ANY, fully_qualified_items_to_delete_table_name),
           mock.call(mock.ANY,
                     fully_qualified_items_to_prevent_expiring_table_name),
@@ -216,15 +219,13 @@ class CalculateProductChangesTest(parameterized.TestCase):
       mock_cleanup_completed_filenames.return_value = True
       mock_ensure_all_files_were_imported.return_value = (True, [])
       mock_table_exists.return_value = False
-      fully_qualified_items_table = (
-          f'{_TEST_GCP_PROJECT_ID}.{_TEST_BQ_DATASET}.{_TEST_ITEMS_TABLE}')
 
       main.calculate_product_changes(self.event, self.context)
 
       self.assertIn('One or more necessary tables are missing.',
                     mock_logging.output[0])
       mock_clean_up.assert_called_with(mock.ANY, mock.ANY, _TEST_LOCK_BUCKET,
-                                       fully_qualified_items_table)
+                                       _TEST_FULLY_QUALIFIED_ITEMS_TABLE)
 
   def test_table_exists_returns_false_when_table_is_missing(self, _):
     with mock.patch('main.storage.Client'), mock.patch(
@@ -232,14 +233,12 @@ class CalculateProductChangesTest(parameterized.TestCase):
             level='ERROR') as mock_logging:
       mock_get_table = mock_bigquery_client.get_table
       mock_get_table.side_effect = exceptions.NotFound('404')
-      fully_qualified_items_table = (
-          f'{_TEST_GCP_PROJECT_ID}.{_TEST_BQ_DATASET}.{_TEST_ITEMS_TABLE}')
 
       result = main._table_exists(mock_bigquery_client,
-                                  fully_qualified_items_table)
+                                  _TEST_FULLY_QUALIFIED_ITEMS_TABLE)
 
-      mock_get_table.assert_called_with(fully_qualified_items_table)
-      self.assertIn(f'Table {fully_qualified_items_table} must exist',
+      mock_get_table.assert_called_with(_TEST_FULLY_QUALIFIED_ITEMS_TABLE)
+      self.assertIn(f'Table {_TEST_FULLY_QUALIFIED_ITEMS_TABLE} must exist',
                     mock_logging.output[0])
       self.assertFalse(result)
 
@@ -247,13 +246,11 @@ class CalculateProductChangesTest(parameterized.TestCase):
     with mock.patch('main.storage.Client'), mock.patch(
         'main.bigquery.Client') as mock_bigquery_client:
       mock_get_table = mock_bigquery_client.get_table
-      fully_qualified_items_table = (
-          f'{_TEST_GCP_PROJECT_ID}.{_TEST_BQ_DATASET}.{_TEST_ITEMS_TABLE}')
 
       result = main._table_exists(mock_bigquery_client,
-                                  fully_qualified_items_table)
+                                  _TEST_FULLY_QUALIFIED_ITEMS_TABLE)
 
-      mock_get_table.assert_called_with(fully_qualified_items_table)
+      mock_get_table.assert_called_with(_TEST_FULLY_QUALIFIED_ITEMS_TABLE)
       self.assertTrue(result)
 
   @mock.patch('main._lock_exists')
@@ -262,15 +259,10 @@ class CalculateProductChangesTest(parameterized.TestCase):
       self, mock_trigger_reupload_function, mock_lock_exists, _):
     with mock.patch('main.storage.Client') as mock_storage_client:
       mock_lock_exists.return_value = False
-      test_attempted_files = iter([
-          types.SimpleNamespace(name='file1'),
-          types.SimpleNamespace(name='file2'),
-          types.SimpleNamespace(name='file3')
-      ])
-      test_completed_files = iter([
-          types.SimpleNamespace(name='file1'),
-          types.SimpleNamespace(name='file3')
-      ])
+      test_attempted_filenames = ['file1', 'file2', 'file3']
+      test_completed_filenames = ['file1', 'file3']
+      test_attempted_files, test_completed_files = _setup_fake_filesets(
+          test_attempted_filenames, test_completed_filenames)
       mock_list_blobs = mock_storage_client.return_value.list_blobs
       mock_list_blobs.side_effect = [test_attempted_files, test_completed_files]
 
@@ -296,16 +288,9 @@ class CalculateProductChangesTest(parameterized.TestCase):
       mock_lock_exists.return_value = False
       mock_cleanup_completed_filenames.return_value = True
       mock_table_exists.return_value = True
-      test_attempted_files = iter([
-          types.SimpleNamespace(name='file1'),
-          types.SimpleNamespace(name='file2'),
-          types.SimpleNamespace(name='file3')
-      ])
-      test_completed_files = iter([
-          types.SimpleNamespace(name='file1'),
-          types.SimpleNamespace(name='file3'),
-          types.SimpleNamespace(name='file2')
-      ])
+      matching_fileset = ['file1', 'file2', 'file3']
+      test_attempted_files, test_completed_files = _setup_fake_filesets(
+          matching_fileset, matching_fileset)
       mock_storage_client.return_value.list_blobs.side_effect = [
           test_attempted_files, test_completed_files
       ]
@@ -327,16 +312,9 @@ class CalculateProductChangesTest(parameterized.TestCase):
             level='ERROR') as mock_logging:
       mock_lock_exists.return_value = False
       mock_cleanup_completed_filenames.return_value = False
-      test_attempted_files = iter([
-          types.SimpleNamespace(name='file1'),
-          types.SimpleNamespace(name='file2'),
-          types.SimpleNamespace(name='file3')
-      ])
-      test_completed_files = iter([
-          types.SimpleNamespace(name='file1'),
-          types.SimpleNamespace(name='file3'),
-          types.SimpleNamespace(name='file2')
-      ])
+      matching_fileset = ['file1', 'file2', 'file3']
+      test_attempted_files, test_completed_files = _setup_fake_filesets(
+          matching_fileset, matching_fileset)
       mock_storage_client.return_value.list_blobs.side_effect = [
           test_attempted_files, test_completed_files
       ]
@@ -354,16 +332,10 @@ class CalculateProductChangesTest(parameterized.TestCase):
       mock_get_bucket = mock_storage_client.return_value.get_bucket
       mock_upload_from_string = (
           mock_get_bucket.return_value.blob.return_value.upload_from_string)
-      test_attempted_files = iter([
-          types.SimpleNamespace(name='file1'),
-          types.SimpleNamespace(name='file2'),
-          types.SimpleNamespace(name='file3'),
-          types.SimpleNamespace(name='file4')
-      ])
-      test_completed_files = iter([
-          types.SimpleNamespace(name='file1'),
-          types.SimpleNamespace(name='file3')
-      ])
+      test_attempted_filenames = ['file1', 'file2', 'file3', 'file4']
+      test_completed_filenames = ['file1', 'file3']
+      test_attempted_files, test_completed_files = _setup_fake_filesets(
+          test_attempted_filenames, test_completed_filenames)
       mock_storage_client.return_value.list_blobs.side_effect = [
           test_attempted_files, test_completed_files
       ]
@@ -384,12 +356,10 @@ class CalculateProductChangesTest(parameterized.TestCase):
         'main.storage.Client') as mock_storage_client, self.assertLogs(
             level='ERROR') as mock_logging:
       mock_lock_exists.return_value = False
-      test_attempted_files = iter([])
-      test_completed_files = iter([
-          types.SimpleNamespace(name='file1'),
-          types.SimpleNamespace(name='file3'),
-          types.SimpleNamespace(name='file2')
-      ])
+      test_attempted_filenames = []
+      test_completed_filenames = ['file1', 'file3', 'file2']
+      test_attempted_files, test_completed_files = _setup_fake_filesets(
+          test_attempted_filenames, test_completed_filenames)
       mock_storage_client.return_value.list_blobs.side_effect = [
           test_attempted_files, test_completed_files
       ]
@@ -404,12 +374,10 @@ class CalculateProductChangesTest(parameterized.TestCase):
       self, mock_clean_up, mock_lock_exists, _):
     with mock.patch('main.storage.Client') as mock_storage_client:
       mock_lock_exists.return_value = False
-      test_attempted_files = iter([])
-      test_completed_files = iter([
-          types.SimpleNamespace(name='file1'),
-          types.SimpleNamespace(name='file3'),
-          types.SimpleNamespace(name='file2')
-      ])
+      test_attempted_filenames = []
+      test_completed_filenames = ['file1', 'file3', 'file2']
+      test_attempted_files, test_completed_files = _setup_fake_filesets(
+          test_attempted_filenames, test_completed_filenames)
       mock_storage_client.return_value.list_blobs.side_effect = [
           test_attempted_files, test_completed_files
       ]
@@ -429,12 +397,10 @@ class CalculateProductChangesTest(parameterized.TestCase):
         'main.storage.Client') as mock_storage_client, self.assertLogs(
             level='ERROR') as mock_logging:
       mock_lock_exists.return_value = False
-      test_attempted_files = iter([
-          types.SimpleNamespace(name='file1'),
-          types.SimpleNamespace(name='file3'),
-          types.SimpleNamespace(name='file2')
-      ])
-      test_completed_files = iter([])
+      test_attempted_filenames = ['file1', 'file3', 'file2']
+      test_completed_filenames = []
+      test_attempted_files, test_completed_files = _setup_fake_filesets(
+          test_attempted_filenames, test_completed_filenames)
       mock_storage_client.return_value.list_blobs.side_effect = [
           test_attempted_files, test_completed_files
       ]
@@ -450,12 +416,10 @@ class CalculateProductChangesTest(parameterized.TestCase):
       self, mock_clean_up, mock_lock_exists, _):
     with mock.patch('main.storage.Client') as mock_storage_client:
       mock_lock_exists.return_value = False
-      test_attempted_files = iter([
-          types.SimpleNamespace(name='file1'),
-          types.SimpleNamespace(name='file3'),
-          types.SimpleNamespace(name='file2')
-      ])
-      test_completed_files = iter([])
+      test_attempted_filenames = ['file1', 'file3', 'file2']
+      test_completed_filenames = []
+      test_attempted_files, test_completed_files = _setup_fake_filesets(
+          test_attempted_filenames, test_completed_filenames)
       mock_storage_client.return_value.list_blobs.side_effect = [
           test_attempted_files, test_completed_files
       ]
@@ -500,38 +464,34 @@ class CalculateProductChangesTest(parameterized.TestCase):
 
   @mock.patch('main._lock_exists')
   @mock.patch('main._cleanup_completed_filenames')
+  @mock.patch('main._clean_up')
   @mock.patch('main._set_table_expiration_date')
   @mock.patch('main._archive_folder')
   @mock.patch('main._table_exists')
   @mock.patch('main._parse_bigquery_config')
   @mock.patch('main._run_materialize_job')
   @mock.patch('main._count_changes')
+  @mock.patch('main._create_task')
   def test_cleanup_completed_filenames_is_called_if_ensure_all_files_were_imported_was_successful(
-      self, mock_count_changes, mock_run_materialize_job,
+      self, mock_create_task, mock_count_changes, mock_run_materialize_job,
       mock_parse_bigquery_config, mock_table_exists, mock_archive_folder,
-      mock_set_table_expiration_date, mock_cleanup_completed_filenames,
-      mock_lock_exists, _):
+      mock_set_table_expiration_date, mock_clean_up,
+      mock_cleanup_completed_filenames, mock_lock_exists, _):
     # unused by this test.
-    del mock_run_materialize_job, mock_set_table_expiration_date
+    del mock_run_materialize_job, mock_set_table_expiration_date, mock_clean_up
     with mock.patch('main.storage.Client') as mock_storage_client:
       mock_table_exists.return_value = True
       mock_lock_exists.return_value = False
-      test_attempted_files = iter([
-          types.SimpleNamespace(name='file1'),
-          types.SimpleNamespace(name='file2'),
-          types.SimpleNamespace(name='file3')
-      ])
-      test_completed_files = iter([
-          types.SimpleNamespace(name='file1'),
-          types.SimpleNamespace(name='file3'),
-          types.SimpleNamespace(name='file2')
-      ])
+      matching_fileset = ['file1', 'file2', 'file3']
+      test_attempted_files, test_completed_files = _setup_fake_filesets(
+          matching_fileset, matching_fileset)
       mock_storage_client.return_value.list_blobs.side_effect = [
           test_attempted_files, test_completed_files
       ]
       mock_archive_folder.return_value = True
       mock_parse_bigquery_config.return_value = (_TEST_QUERY, '')
       mock_count_changes.side_effect = [0, 0, 0]
+      mock_create_task.return_value = True
 
       main.calculate_product_changes(self.event, self.context)
 
@@ -906,3 +866,174 @@ class CalculateProductChangesTest(parameterized.TestCase):
       self.assertIn(
           f'Upserts count {test_upserts_count} crossed upserts threshold of '
           f'{_TEST_UPSERTS_THRESHOLD}', mock_logging.output[0])
+
+  @mock.patch('main._lock_exists')
+  @mock.patch('main._cleanup_completed_filenames')
+  @mock.patch('main._clean_up')
+  @mock.patch('main._set_table_expiration_date')
+  @mock.patch('main._archive_folder')
+  @mock.patch('main._table_exists')
+  @mock.patch('main._parse_bigquery_config')
+  @mock.patch('main._run_materialize_job')
+  @mock.patch('main._count_changes')
+  @mock.patch('main._create_task')
+  @mock.patch('main._run_dml_job')
+  def test_calculate_product_changes_cleans_up_if_create_task_fails(
+      self, mock_run_dml_job, mock_create_task, mock_count_changes,
+      mock_run_materialize_job, mock_parse_bigquery_config, mock_table_exists,
+      mock_archive_folder, mock_set_table_expiration_date, mock_clean_up,
+      mock_cleanup_completed_filenames, mock_lock_exists, _):
+    # unused by this test.
+    del (mock_run_materialize_job, mock_set_table_expiration_date,
+         mock_cleanup_completed_filenames)
+    with mock.patch('main.storage.Client') as mock_storage_client, mock.patch(
+        'main.bigquery.Client'):
+      mock_table_exists.return_value = True
+      mock_lock_exists.return_value = False
+      matching_fileset = ['file1', 'file2', 'file3']
+      test_attempted_files, test_completed_files = _setup_fake_filesets(
+          matching_fileset, matching_fileset)
+      mock_storage_client.return_value.list_blobs.side_effect = [
+          test_attempted_files, test_completed_files
+      ]
+      mock_archive_folder.return_value = True
+      mock_parse_bigquery_config.return_value = (_TEST_QUERY, '')
+      mock_count_changes.side_effect = [0, 0, 0]
+      mock_create_task.return_value = False
+
+      main.calculate_product_changes(self.event, self.context)
+
+      mock_clean_up.assert_called_with(mock.ANY, mock.ANY, _TEST_LOCK_BUCKET,
+                                       _TEST_FULLY_QUALIFIED_ITEMS_TABLE)
+      mock_run_dml_job.assert_called()
+
+  @mock.patch('main._lock_exists')
+  @mock.patch('main._cleanup_completed_filenames')
+  @mock.patch('main._clean_up')
+  @mock.patch('main._set_table_expiration_date')
+  @mock.patch('main._archive_folder')
+  @mock.patch('main._table_exists')
+  @mock.patch('main._parse_bigquery_config')
+  @mock.patch('main._run_materialize_job')
+  @mock.patch('main._count_changes')
+  @mock.patch('main._create_task')
+  def test_calculate_product_changes_cleans_up_if_create_task_succeeds(
+      self, mock_create_task, mock_count_changes, mock_run_materialize_job,
+      mock_parse_bigquery_config, mock_table_exists, mock_archive_folder,
+      mock_set_table_expiration_date, mock_clean_up,
+      mock_cleanup_completed_filenames, mock_lock_exists, _):
+    # unused by this test.
+    del (mock_run_materialize_job, mock_set_table_expiration_date,
+         mock_cleanup_completed_filenames)
+    with mock.patch('main.storage.Client') as mock_storage_client, mock.patch(
+        'main.bigquery.Client'):
+      mock_table_exists.return_value = True
+      mock_lock_exists.return_value = False
+      matching_fileset = ['file1', 'file2', 'file3']
+      test_attempted_files, test_completed_files = _setup_fake_filesets(
+          matching_fileset, matching_fileset)
+      mock_storage_client.return_value.list_blobs.side_effect = [
+          test_attempted_files, test_completed_files
+      ]
+      mock_archive_folder.return_value = True
+      mock_parse_bigquery_config.return_value = (_TEST_QUERY, '')
+      mock_count_changes.side_effect = [0, 0, 0]
+      mock_create_task.return_value = True
+
+      main.calculate_product_changes(self.event, self.context)
+
+      mock_clean_up.assert_called_with(
+          mock.ANY,
+          mock.ANY,
+          _TEST_LOCK_BUCKET,
+          _TEST_FULLY_QUALIFIED_ITEMS_TABLE,
+          clean_items_table=False)
+
+  @mock.patch('main._lock_exists')
+  @mock.patch('main._cleanup_completed_filenames')
+  @mock.patch('main._clean_up')
+  @mock.patch('main._set_table_expiration_date')
+  @mock.patch('main._archive_folder')
+  @mock.patch('main._table_exists')
+  @mock.patch('main._parse_bigquery_config')
+  @mock.patch('main._run_materialize_job')
+  @mock.patch('main._count_changes')
+  @mock.patch('main._create_task')
+  def test_calculate_product_changes_calls_create_task_with_correct_number_of_changes(
+      self, mock_create_task, mock_count_changes, mock_run_materialize_job,
+      mock_parse_bigquery_config, mock_table_exists, mock_archive_folder,
+      mock_set_table_expiration_date, mock_clean_up,
+      mock_cleanup_completed_filenames, mock_lock_exists, _):
+    # unused by this test.
+    del (mock_cleanup_completed_filenames, mock_clean_up,
+         mock_set_table_expiration_date, mock_run_materialize_job)
+    test_delete_count = 100
+    with mock.patch('main.storage.Client') as mock_storage_client, mock.patch(
+        'main.bigquery.Client'):
+      mock_table_exists.return_value = True
+      mock_lock_exists.return_value = False
+      matching_fileset = ['file1', 'file2', 'file3']
+      test_attempted_files, test_completed_files = _setup_fake_filesets(
+          matching_fileset, matching_fileset)
+      mock_storage_client.return_value.list_blobs.side_effect = [
+          test_attempted_files, test_completed_files
+      ]
+      mock_archive_folder.return_value = True
+      mock_parse_bigquery_config.return_value = (_TEST_QUERY, '')
+      mock_count_changes.side_effect = [test_delete_count, 0, 0]
+      mock_create_task.return_value = True
+
+      test_task_payload = {
+          'deleteCount': test_delete_count,
+          'expiringCount': 0,
+          'upsertCount': 0,
+      }
+
+      main.calculate_product_changes(self.event, self.context)
+
+      mock_create_task.assert_called_with(_TEST_GCP_PROJECT_ID,
+                                          _TEST_TASK_QUEUE_NAME,
+                                          _TEST_TASK_QUEUE_LOCATION,
+                                          test_task_payload)
+
+  def test_create_task_sends_task_to_task_queue(self, _):
+    with mock.patch(
+        'main.tasks_v2.CloudTasksClient') as mock_cloud_tasks_client:
+      test_task_payload = {
+          'deleteCount': 100,
+          'expiringCount': 10,
+          'upsertCount': 1000,
+      }
+
+      main._create_task(_TEST_GCP_PROJECT_ID, _TEST_TASK_QUEUE_NAME,
+                        _TEST_TASK_QUEUE_LOCATION, test_task_payload)
+      mock_cloud_tasks_client.return_value.queue_path.assert_called_with(
+          _TEST_GCP_PROJECT_ID, _TEST_TASK_QUEUE_LOCATION,
+          _TEST_TASK_QUEUE_NAME)
+      mock_cloud_tasks_client.return_value.create_task.assert_called()
+
+  def test_create_task_returns_false_if_payload_was_none(self, _):
+    with mock.patch(
+        'main.tasks_v2.CloudTasksClient') as mock_cloud_tasks_client:
+      test_task_payload = None
+
+      create_task_result = main._create_task(_TEST_GCP_PROJECT_ID,
+                                             _TEST_TASK_QUEUE_NAME,
+                                             _TEST_TASK_QUEUE_LOCATION,
+                                             test_task_payload)
+
+      mock_cloud_tasks_client.return_value.create_task.assert_not_called()
+      self.assertFalse(create_task_result)
+
+
+def _setup_fake_filesets(attempted_filenames: List[str],
+                         completed_filenames: List[str]) -> Tuple[iter, iter]:
+  """Generates fake filesets based on the given lists of filenames."""
+  attempted_fileset = iter([
+      types.SimpleNamespace(name=name) for name in attempted_filenames
+  ]) if len(attempted_filenames) else iter([])
+  completed_fileset = iter([
+      types.SimpleNamespace(name=name) for name in completed_filenames
+  ]) if len(completed_filenames) else iter([])
+
+  return (attempted_fileset, completed_fileset)
