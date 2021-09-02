@@ -14,7 +14,6 @@
 # limitations under the License.
 
 """Stores the counts for a certain operation (upsert/delete/expiring) during a run of SFO."""
-
 import dataclasses
 
 

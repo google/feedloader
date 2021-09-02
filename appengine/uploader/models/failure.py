@@ -14,7 +14,6 @@
 # limitations under the License.
 
 """Class to save the result of a Content API failure."""
-
 import dataclasses
 
 
