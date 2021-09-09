@@ -13,12 +13,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Cloud Function that triggers on GCS bucket upload to import data into BQ."""
+"""CF that triggers on GCS bucket upload to calculate product diffs."""
 import datetime
 import json
 import logging
 import os
-from typing import Any, Collection, Dict
+from typing import Any, Collection, Dict, List
 
 from google.api_core import exceptions
 from google.cloud import bigquery
@@ -28,97 +28,62 @@ import iso8601
 import pytz
 import schema
 
-_ARCHIVE_FOLDER_PREFIX = 'archive/'
 _CONFIG_FILENAME = 'config.json'
+_EOF_RETRY_FILENAME = 'EOF.retry'
 _EVENT_MAX_AGE_SECONDS = 540  # Default expiration of this CF is 9 minutes.
-_ITEMS_TABLE_EXPIRATION_DURATION_MS = 43200000
-_TABLE_PARTITION_GRANULARITY = 'DAY'
+_ITEMS_TABLE_EXPIRATION_DURATION_MS = 43200000  # 12 hours.
+_ITEMS_TABLE_NAME = 'items'
 
 
-def import_storage_file_into_big_query(
-    event: Dict[str, Any], context: 'google.cloud.functions.Context') -> None:
-  """Cloud Function ("CF") triggered by a Cloud Storage ("GCS") bucket upload.
-
-     This function converts the uploaded GCS file data into a BigQuery table.
+def reprocess_feed_file(event: Dict[str, Any],
+                        context: 'google.cloud.functions.Context') -> None:
+  """Cloud Function that re-uploads the provided file into BigQuery.
 
   Args:
       event:  The dictionary with data specific to this type of event. The
-        `data` field contains a description of the event in the Cloud Storage
-        `object` format described here:
+        'data' field contains a description of the event in the Cloud Storage
+        'object' format described here:
         https://cloud.google.com/storage/docs/json_api/v1/objects#resource
       context: Metadata of triggering event.
 
   Raises:
     RuntimeError: A dependency was not found, requiring this CF to exit.
+      The RuntimeError is not raised explicitly in this function but is
+      default behavior for any Cloud Function.
 
   Returns:
       None. The output is written to Cloud logging.
   """
-
-  # Do not run this function if the file is meant for archival.
-  if _ARCHIVE_FOLDER_PREFIX in event['name']:
-    return
-
+  # Prevent long-running retries.
   if _function_execution_exceeded_max_allowed_duration(context):
     return
 
-  _log_uploaded_file_metadata(context, event)
-  update_bucket_name = os.environ.get('UPDATE_BUCKET')
-
-  if not update_bucket_name:
-    logging.error(
-        exceptions.NotFound('Update Bucket Environment Variable not found.'))
-    return
-
-  schema_config_contents = open(_CONFIG_FILENAME).read()
-  schema_config = json.loads(schema_config_contents)
+  schema_config_file = open(_CONFIG_FILENAME,)
+  schema_config = json.load(schema_config_file)
   if not _schema_config_valid(schema_config):
     logging.error(
-        exceptions.BadRequest(f'Schema is invalid: {schema_config_contents} .'))
+        exceptions.BadRequest(f'Schema is invalid: {schema_config} .'))
     return
   items_table_bq_schema = _parse_schema_config(schema_config)
 
+  print('Starting reprocess_feed_file Cloud Function...')
   storage_client = storage.Client()
+  retrigger_bucket = storage_client.get_bucket(
+      os.environ.get('RETRIGGER_BUCKET'))
+  missing_files_blob = retrigger_bucket.get_blob(event['name'])
+  missing_files_bytes = missing_files_blob.download_as_string()
+  missing_files = []
 
-  try:
-    eof_bucket = storage_client.get_bucket(update_bucket_name)
-  except exceptions.NotFound:
-    logging.error(
-        exceptions.NotFound(f'Bucket {update_bucket_name} could not be found.'))
-    return
+  if missing_files_bytes:
+    missing_files = missing_files_bytes.decode('utf-8').splitlines()
 
-  update_eof = eof_bucket.get_blob('EOF')
-
-  # The EOF file may be uploaded by the bq-stage-changes CF if processing is
-  # currently ongoing, so prevent this CF from continuing if it exists.
-  if update_eof is not None:
-    logging.error(
-        RuntimeError((f'An EOF file was found in bucket: {update_bucket_name}, '
-                      'indicating Feedloader is currently processing '
-                      'a set of feeds into Content API. Please wait or '
-                      'force remove the EOF file from the bucket.')))
-    return
-
-  # This CF might execute before the file is visible in GCS, so check first.
-  if _file_to_import_exists(storage_client, event['bucket'], event['name']):
-    _perform_bigquery_load(event['bucket'], event['name'],
-                           items_table_bq_schema)
+  if not missing_files:
+    print('No more files to reprocess. Uploading a retry EOF...')
+    _retrigger_calculation_function(storage_client)
   else:
-    # Need to wait until the file is found, so raise to trigger an auto-retry.
-    raise RuntimeError(
-        (f"GCS File {event['bucket']}/{event['name']} not detected in GCS yet. "
-         f'Retrying...'))
-
-  _save_imported_filename_to_gcs(storage_client, event)
-
-
-def _file_to_import_exists(storage_client: storage.client.Client,
-                           bucket_name: str, filename: str) -> bool:
-  """Helper function that returns whether the given GCS file exists or not."""
-
-  storage_bucket = storage_client.get_bucket(bucket_name)
-  return storage.Blob(
-      bucket=storage_bucket, name=filename).exists(storage_client)
+    file_to_reprocess = missing_files.pop(0)
+    _reprocess_file(storage_client, file_to_reprocess, items_table_bq_schema)
+    _reupload_file_list(storage_client, missing_files, event['name'])
 
 
 def _function_execution_exceeded_max_allowed_duration(
@@ -138,17 +103,76 @@ def _function_execution_exceeded_max_allowed_duration(
   return False
 
 
-def _log_uploaded_file_metadata(context: 'google.cloud.functions.Context',
-                                event: Dict[str, Any]) -> None:
-  """Logs the Cloud Function event and file info to Stackdriver."""
-
-  print(f'Event ID: {context.event_id}')
-  print(f"Uploaded Filename: {event['bucket']}/{event['name']}")
-
-
 def _get_current_time_in_utc() -> datetime.datetime:
   """Helper function that wraps retrieving the current date and time in UTC."""
   return datetime.datetime.now(pytz.utc)
+
+
+def _reprocess_file(
+    storage_client: storage.client.Client, filename: str,
+    items_table_bq_schema: Collection[bigquery.SchemaField]) -> None:
+  """Reloads the specified filename from Cloud Storage into BigQuery.
+
+  Args:
+      storage_client: The GCS object instance.
+      filename: The name of the file to reprocess.
+      items_table_bq_schema: A parsed list of BigQuery schema columns.
+  """
+  print(f'Attempting reprocess of file {filename} into BigQuery...')
+  _perform_bigquery_load(
+      os.environ.get('FEED_BUCKET'), filename, items_table_bq_schema)
+
+  print(f'File:{filename} was re-loaded into BigQuery successfully. '
+        'Starting insert of import history record...')
+  _save_imported_filename_to_gcs(storage_client, filename)
+
+
+def _reupload_file_list(storage_client: storage.client.Client,
+                        file_list: List[str], filename: str) -> None:
+  """Reuploads list of missing files to GCS, triggers calculate_product_changes.
+
+  Args:
+      storage_client: The GCS object instance.
+      file_list: A List containing each filename representing missing files.
+      filename: The filename to re-upload to the bucket.
+  """
+  file_list_str_rejoined = '\n'.join(file_list)
+  retrigger_bucket_name = os.environ.get('RETRIGGER_BUCKET').replace(
+      'gs://', '')
+  retrigger_bucket = storage_client.get_bucket(retrigger_bucket_name)
+  retrigger_bucket.blob(filename).upload_from_string(file_list_str_rejoined)
+
+
+def _retrigger_calculation_function(storage_client: storage.client.Client()
+                                   ) -> None:
+  """Uploads an empty EOF.retry file to re-trigger the calculate_product_changes CF."""
+  update_bucket_name = os.environ.get('UPDATE_BUCKET').replace('gs://', '')
+  update_bucket = storage_client.get_bucket(update_bucket_name)
+  update_bucket.blob(_EOF_RETRY_FILENAME).upload_from_string('')
+
+
+def _schema_config_valid(schema_config: Dict[str, Any]) -> bool:
+  """Helper method that returns True if the config is in the correct format."""
+  if not isinstance(schema_config.get('mapping'), list):
+    return False
+
+  items_table_schema = schema.Schema([{
+      'csvHeader': str,
+      'bqColumn': str,
+      'columnType': str,
+  }])
+
+  return items_table_schema.is_valid(schema_config.get('mapping'))
+
+
+def _parse_schema_config(
+    schema_config: Dict[str, Any]) -> Collection[bigquery.SchemaField]:
+  """Transforms the items table schema config file into a BQ-loadable object."""
+  bq_schema = [
+      bigquery.SchemaField(column.get('bqColumn'), column.get('columnType'))
+      for column in schema_config.get('mapping')
+  ]
+  return bq_schema
 
 
 def _perform_bigquery_load(
@@ -180,13 +204,12 @@ def _perform_bigquery_load(
       skip_leading_rows=1,
       source_format=bigquery.SourceFormat.CSV,
       time_partitioning=bigquery.table.TimePartitioning(
-          type_=_TABLE_PARTITION_GRANULARITY,
-          expiration_ms=_ITEMS_TABLE_EXPIRATION_DURATION_MS),
+          type_='DAY', expiration_ms=_ITEMS_TABLE_EXPIRATION_DURATION_MS),
       write_disposition='WRITE_APPEND',
   )
 
   gcs_uri = f'gs://{bucket_name}/{filename}'
-  feed_table_path = f"{os.environ.get('BQ_DATASET')}.items"
+  feed_table_path = f"{os.environ.get('BQ_DATASET')}.{_ITEMS_TABLE_NAME}"
 
   bigquery_load_job = bigquery_client.load_table_from_uri(
       gcs_uri, feed_table_path, job_config=bigquery_job_config)
@@ -205,7 +228,7 @@ def _perform_bigquery_load(
 
 
 def _save_imported_filename_to_gcs(storage_client: storage.client.Client,
-                                   event: Dict[str, Any]) -> None:
+                                   filename: str) -> None:
   """Helper function that records the imported file's name to a GCS bucket."""
   print('Starting insert of import history record...')
 
@@ -214,31 +237,7 @@ def _save_imported_filename_to_gcs(storage_client: storage.client.Client,
   completed_files_bucket = storage_client.get_bucket(
       completed_files_bucket_name)
 
-  completed_files_bucket.blob(event['name']).upload_from_string('')
+  completed_files_bucket.blob(filename).upload_from_string('')
 
-  print(f"Imported filename: {event['name']} was saved into GCS bucket: "
+  print(f'Imported filename: {filename} was saved into GCS bucket: '
         f'{completed_files_bucket_name} to confirm the upload succeeded.')
-
-
-def _schema_config_valid(schema_config: Dict[str, Any]) -> bool:
-  """Helper method that returns True if the config is in the correct format."""
-  if not isinstance(schema_config.get('mapping'), list):
-    return False
-
-  items_table_schema = schema.Schema([{
-      'csvHeader': str,
-      'bqColumn': str,
-      'columnType': str
-  }])
-
-  return items_table_schema.is_valid(schema_config.get('mapping'))
-
-
-def _parse_schema_config(
-    schema_config: Dict[str, Any]) -> Collection[bigquery.SchemaField]:
-  """Transforms the items table schema config file into a BQ-loadable object."""
-  bq_schema = [
-      bigquery.SchemaField(column.get('bqColumn'), column.get('columnType'))
-      for column in schema_config.get('mapping')
-  ]
-  return bq_schema
