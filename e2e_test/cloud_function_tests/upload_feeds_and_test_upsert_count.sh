@@ -17,9 +17,11 @@
 # CAUTION: THIS SCRIPT WILL REMOVE GCS BUCKETS AND BIG QUERY TABLES IN THE
 # TARGET GCP PROJECT. IT IS FOR TESTING PURPOSES ONLY.
 
-# This script cleans up buckets and tables, automates the upload of feed files
-# to Cloud Storage, waits 200 seconds, and uploads an EOF file to initiate
-# Feedloader processing of feed files. It is NOT intended for production use.
+# This script will upload a set of files pointed to by the given directory arg,
+# start Feedloader by uploading an EOF file, create a change in one file only,
+# and re-upload the same feeds to test an upsert happens via Feedloader's
+# Cloud Functions. The modified file is reverted to its original state at the
+# end of this script so that it can be run idempotently.
 
 export CLOUDSDK_PYTHON=/usr/bin/python2.7
 if echo "$OSTYPE" | grep -q darwin
@@ -79,8 +81,46 @@ print_green "Finished recreating tables. Proceeding to upload feeds to GCS..."
 
 gsutil -m cp -j csv "${FEED_PATH%/}"/*."${FEED_EXTENSION#.}" gs://"${GCP_PROJECT}"-feed
 print_green "Finished uploading feed files. You can check the logs at ${HYPERLINK}https://console.cloud.google.com/functions/details/us-central1/import_storage_file_into_big_query?project=${GCP_PROJECT}&tab=logs\ahttps://console.cloud.google.com/functions/details/us-central1/import_storage_file_into_big_query?project=${GCP_PROJECT}&tab=logs${HYPERLINK}\a. Pausing before uploading EOF..."
-sleep 200
+sleep 120
 
 gsutil -m cp -j csv "${EOF_PATH}" gs://"${GCP_PROJECT}"-update
 print_green "Finished uploading EOF. You can check the logs at ${HYPERLINK}https://console.cloud.google.com/functions/details/us-central1/calculate_product_changes?project=${GCP_PROJECT}&tab=logs\ahttps://console.cloud.google.com/functions/details/us-central1/calculate_product_changes?project=${GCP_PROJECT}&tab=logs${HYPERLINK}\a"
+sleep 30
+
+# shellcheck disable=SC2061
+FEED_FILES=$(find "${FEED_PATH%/}" -name *."${FEED_EXTENSION#.}")
+ONE_FILE=$(echo "${FEED_FILES}" | head -1)
+print_green "ONE FILE: ${ONE_FILE}"
+
+# Save the second line.
+TEMP_LINE=$(sed '2q;d' "$ONE_FILE")
+print_green "TEMP LINE:\n${TEMP_LINE}"
+
+# Update the second line and overwrite to create a diff.
+PRODUCT_ID=$(echo "$TEMP_LINE" | cut -d$'\t' -f1)
+REST_OF_LINE=$(echo "$TEMP_LINE" | cut -d$'\t' -f3-)
+print_green "PRODUCT_ID: ${PRODUCT_ID}"
+print_green "REST_OF_LINE:\n${REST_OF_LINE}"
+
+# Delete the second line and overwrite to create a diff.
+sed -i '' '2d' "$ONE_FILE" &
+wait $!
+
+sed -i '' '2i\'$'\n'"$PRODUCT_ID""$(printf '\t')Test$(printf '\t')""${REST_OF_LINE}"$'\n' "$ONE_FILE" &
+wait $!
+
+gsutil -m cp -j csv "${FEED_PATH%/}"/*."${FEED_EXTENSION#.}" gs://"${GCP_PROJECT}"-feed
+print_green "Finished uploading all feed files with an update included. You can check the logs at ${HYPERLINK}https://console.cloud.google.com/functions/details/us-central1/import_storage_file_into_big_query?project=${GCP_PROJECT}&tab=logs\ahttps://console.cloud.google.com/functions/details/us-central1/import_storage_file_into_big_query?project=${GCP_PROJECT}&tab=logs${HYPERLINK}\a. Pausing before uploading EOF..."
+sleep 120
+
+gsutil -m cp -j csv "${EOF_PATH}" gs://"${GCP_PROJECT}"-update
+print_green "Finished uploading EOF. You can check the logs at ${HYPERLINK}https://console.cloud.google.com/functions/details/us-central1/calculate_product_changes?project=${GCP_PROJECT}&tab=logs\ahttps://console.cloud.google.com/functions/details/us-central1/calculate_product_changes?project=${GCP_PROJECT}&tab=logs${HYPERLINK}\a"
+
+# Restore the line to the test file.
+sed -i '' '2d' "$ONE_FILE" &
+wait $!
+
+sed -i '' -e '2i\'$'\n'"${TEMP_LINE}"$'\n' "$ONE_FILE" &
+wait $!
+
 print_green "Automated feed uploader completed."

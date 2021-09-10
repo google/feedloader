@@ -17,9 +17,11 @@
 # CAUTION: THIS SCRIPT WILL REMOVE GCS BUCKETS AND BIG QUERY TABLES IN THE
 # TARGET GCP PROJECT. IT IS FOR TESTING PURPOSES ONLY.
 
-# This script cleans up buckets and tables, automates the upload of feed files
-# to Cloud Storage, waits 200 seconds, and uploads an EOF file to initiate
-# Feedloader processing of feed files. It is NOT intended for production use.
+# This script will upload a set of files pointed to by the given directory arg,
+# start Feedloader by uploading an EOF file, deletes one file in the
+# completed files bucket to simulate a single failed file, then re-uploads the
+# same feeds to test that the missing file was detected and the retry Cloud
+# Function executes. This script can be run idempotently.
 
 export CLOUDSDK_PYTHON=/usr/bin/python2.7
 if echo "$OSTYPE" | grep -q darwin
@@ -79,8 +81,17 @@ print_green "Finished recreating tables. Proceeding to upload feeds to GCS..."
 
 gsutil -m cp -j csv "${FEED_PATH%/}"/*."${FEED_EXTENSION#.}" gs://"${GCP_PROJECT}"-feed
 print_green "Finished uploading feed files. You can check the logs at ${HYPERLINK}https://console.cloud.google.com/functions/details/us-central1/import_storage_file_into_big_query?project=${GCP_PROJECT}&tab=logs\ahttps://console.cloud.google.com/functions/details/us-central1/import_storage_file_into_big_query?project=${GCP_PROJECT}&tab=logs${HYPERLINK}\a. Pausing before uploading EOF..."
-sleep 200
+sleep 20
+
+print_green "Creating a retry situation by deleting one file..."
+COMPLETED_FILES=$(gsutil ls gs://"${GCP_PROJECT}"-completed/)
+ONE_FILE=$(echo "${COMPLETED_FILES}" | head -1)
+gsutil rm "${ONE_FILE}"
+
+print_green "File deleted! Waiting a bit more before uploading an EOF..."
+sleep 10
 
 gsutil -m cp -j csv "${EOF_PATH}" gs://"${GCP_PROJECT}"-update
 print_green "Finished uploading EOF. You can check the logs at ${HYPERLINK}https://console.cloud.google.com/functions/details/us-central1/calculate_product_changes?project=${GCP_PROJECT}&tab=logs\ahttps://console.cloud.google.com/functions/details/us-central1/calculate_product_changes?project=${GCP_PROJECT}&tab=logs${HYPERLINK}\a"
 print_green "Automated feed uploader completed."
+
