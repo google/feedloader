@@ -17,6 +17,6 @@ steps:
   entrypoint: '/bin/bash'
   args: ['-c', 'cp feed_schema_config.json cloud_functions/gcs-bq-retry-feed-load/config.json']
 - name: 'gcr.io/cloud-builders/gcloud'
-  args: ['functions', 'deploy', 'reprocessFeedfile', '--retry', '--timeout', '540s', '--set-env-vars', 'BQ_DATASET=${_BQ_DATASET},FEED_BUCKET=${_FEED_BUCKET},UPDATE_BUCKET=${_UPDATE_BUCKET},COMPLETED_FILES_BUCKET=${_COMPLETED_FILES_BUCKET},RETRIGGER_BUCKET=${_RETRIGGER_BUCKET}', '--trigger-resource', '${_RETRIGGER_BUCKET}', '--trigger-event', 'google.storage.object.finalize', '--runtime', 'nodejs10']
+  args: ['functions', 'deploy', 'reprocess_feed_file', '--retry', '--timeout', '540s', '--set-env-vars', 'BQ_DATASET=${_BQ_DATASET},FEED_BUCKET=${_FEED_BUCKET},UPDATE_BUCKET=${_UPDATE_BUCKET},COMPLETED_FILES_BUCKET=${_COMPLETED_FILES_BUCKET},RETRIGGER_BUCKET=${_RETRIGGER_BUCKET}', '--trigger-resource', '${_RETRIGGER_BUCKET}', '--trigger-event', 'google.storage.object.finalize', '--runtime', 'python39']
   dir: 'cloud_functions/gcs-bq-retry-feed-load'
 timeout: 3600s
