@@ -351,7 +351,6 @@ else
     --zone "$CLOUD_COMPOSER_ZONE" \
     --python-version 3 \
     --machine-type n1-standard-1 \
-    --image-version composer-1.11.1-airflow-1.10.3 \
     --env-variables PROJECT_ID="$GCP_PROJECT",LOCATION="$REGION",PUBSUB_TOPIC="$PUBSUB_TOPIC_MAILER"
 fi
 
