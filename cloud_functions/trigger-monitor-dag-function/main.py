@@ -86,7 +86,7 @@ def make_iap_request(url: str,
     return
 
   # Sets the default timeout, if missing.
-  kwargs.set_default('timeout', 90)
+  kwargs.setdefault('timeout', 90)
 
   google_open_id_connect_token = id_token.fetch_id_token(Request(), client_id)
   resp = requests.request(
