@@ -97,6 +97,7 @@ do
   else
     gcloud services enable "$SERVICE" \
       && echo "$SERVICE has been successfully enabled."
+    sleep 1
   fi
 done
 
@@ -116,9 +117,11 @@ STORAGE_BUCKETS=(
 for BUCKET in "${STORAGE_BUCKETS[@]}"
 do
   BUCKET_CREATE_RESULT=$(gsutil mb -l "$REGION" "$BUCKET" 2>&1)
+  sleep 1
   if [[ $BUCKET_CREATE_RESULT = *"Did you mean to use a gs:// URL"* ]]
   then
     gsutil mb -l "$REGION" "gs://$BUCKET"
+    sleep 1
   fi
 done
 
@@ -135,6 +138,7 @@ DeleteAllServiceAccountKeys() {
   for KEY in $(gcloud alpha iam service-accounts keys list --iam-account="$SERVICE_ACCOUNT_EMAIL" --managed-by="user" | awk '{if(NR>1)print}' | awk '{print $1;}')
   do
     gcloud alpha iam service-accounts keys -q delete "$KEY" --iam-account="$SERVICE_ACCOUNT_EMAIL"
+    sleep 1
   done
 }
 FEED_SERVICE_ACCOUNT=shopping-feed@"$GCP_PROJECT".iam.gserviceaccount.com
@@ -215,6 +219,7 @@ EXISTING_SCHEDULED_QUERIES=$(bq ls --transfer_config --transfer_location=us --pr
 for SCHEDULED_QUERY in $(echo "$EXISTING_SCHEDULED_QUERIES")
 do
   bq rm -f --transfer_config "$SCHEDULED_QUERY"
+  sleep 1
 done
 
 # Schedule a query to cleanup the streaming_items table periodically
@@ -258,6 +263,7 @@ do
   else
     gcloud pubsub topics create "$TOPIC" \
       && echo "Pub/Sub topic $TOPIC has been successfully created."
+    sleep 1
   fi
 done
 
@@ -315,6 +321,7 @@ do
       "$SERVICE_ACCOUNT_KEY" \
       --iam-account "$FEED_SERVICE_ACCOUNT" \
     && echo "Service account key $SERVICE_ACCOUNT_KEY has been successfully created."
+  sleep 1
 done
 
 MC_SERVICE_ACCOUNT_KEY=appengine/uploader/config/mc_service_account.json
@@ -392,6 +399,7 @@ EXISTING_POLICIES="$(gcloud alpha monitoring policies list | grep "name:" | grep
 for POLICY_ID in $(echo "$EXISTING_POLICIES")
 do
   gcloud alpha monitoring policies -q delete "$POLICY_ID"
+  sleep 2
 done
 
 # Create log metrics for alerts
@@ -450,7 +458,7 @@ then
 fi
 gcloud logging metrics create "$EOF_EXISTS_DURING_IMPORT_ERRORS" \
   --description="Count of the import_storage_file_into_big_query Cloud Function errors due to existing EOF preventing concurrent runs from starting" \
-  --log-filter="resource.type=\"cloud_function\" resource.labels.function_name=\"import_storage_file_into_big_query\" resource.labels.region=\"us-central1\" \"An EOF file was found in bucket\""	 \
+  --log-filter="resource.type=\"cloud_function\" resource.labels.function_name=\"import_storage_file_into_big_query\" resource.labels.region=\"us-central1\" \"An EOF file was found in bucket\""  \
   && echo "Metric $EOF_EXISTS_DURING_IMPORT_ERRORS has been successfully created."
 
 CALCULATE_PRODUCT_CHANGES_ERRORS=CalculateProductChangesErrors
@@ -465,7 +473,7 @@ gcloud logging metrics create "$CALCULATE_PRODUCT_CHANGES_ERRORS" \
   && echo "Metric $CALCULATE_PRODUCT_CHANGES_ERRORS has been successfully created."
 
 SCHEMA_CONFIG_PARSE_FAILURE_FOR_LOAD=SchemaConfigParseFailureForLoad
-if echo "$EXISTING_METRICS" | grep "$SCHEMA_CONFIG_PARSE_FAILURE_FOR_LOAD"
+if echo "$EXISTING_METRICS" | grep -q -w "$SCHEMA_CONFIG_PARSE_FAILURE_FOR_LOAD"
 then
   echo "Metric $SCHEMA_CONFIG_PARSE_FAILURE_FOR_LOAD already exists."
   gcloud logging metrics -q delete $SCHEMA_CONFIG_PARSE_FAILURE_FOR_LOAD
@@ -476,7 +484,7 @@ gcloud logging metrics create "$SCHEMA_CONFIG_PARSE_FAILURE_FOR_LOAD" \
   && echo "Metric $SCHEMA_CONFIG_PARSE_FAILURE_FOR_LOAD has been successfully created."
 
 SCHEMA_CONFIG_PARSE_FAILURE_FOR_CALCULATION=SchemaConfigParseFailureForCalculation
-if echo "$EXISTING_METRICS" | grep "$SCHEMA_CONFIG_PARSE_FAILURE_FOR_CALCULATION"
+if echo "$EXISTING_METRICS" | grep -q -w "$SCHEMA_CONFIG_PARSE_FAILURE_FOR_CALCULATION"
 then
   echo "Metric $SCHEMA_CONFIG_PARSE_FAILURE_FOR_CALCULATION already exists."
   gcloud logging metrics -q delete $SCHEMA_CONFIG_PARSE_FAILURE_FOR_CALCULATION
@@ -498,7 +506,7 @@ gcloud logging metrics create "$DELETES_THRESHOLD_CROSSED" \
   && echo "Metric $DELETES_THRESHOLD_CROSSED has been successfully created."
 
 UPSERTS_THRESHOLD_CROSSED=UpsertsThresholdCrossed
-if echo "$EXISTING_METRICS" | grep "$UPSERTS_THRESHOLD_CROSSED"
+if echo "$EXISTING_METRICS" | grep -q -w "$UPSERTS_THRESHOLD_CROSSED"
 then
   echo "Metric $UPSERTS_THRESHOLD_CROSSED already exists."
   gcloud logging metrics -q delete $UPSERTS_THRESHOLD_CROSSED
@@ -839,9 +847,7 @@ ALERT_POLICIES=(
   import-function-timeout-errors-policy.yaml
   import-storage-file-function-errors-policy.yaml
   imported-files-retrieval-errors-policy.yaml
-  imported-gcs-save-errors-policy.yaml
   invalid-eof-errors-policy.yaml
-  invalid-filename-errors-policy.yaml
   nonexistent-table-errors-policy.yaml
   schema-config-errors-calc-policy.yaml
   schema-config-errors-load-policy.yaml
@@ -850,14 +856,19 @@ ALERT_POLICIES=(
 print_green "Recreating alerting policies..."
 for POLICY in "${ALERT_POLICIES[@]}"
 do
+  print_green "Recreating alterting policy $POLICY..."
   POLICY_RESULT="$(gcloud alpha monitoring policies create --policy-from-file="stackdriver_alerts/$POLICY" 2>&1)"
+  sleep 2
   POLICY_ID=$(echo "$POLICY_RESULT" | sed "s/.*\[\(.*\)\].*/\1/")
   for EMAIL in $(echo "$ALERT_EMAILS" | sed "s/,/ /g")
   do
     NOTIFICATION_RESULT="$(gcloud alpha monitoring channels create --display-name="$EMAIL" --type=email --channel-labels="email_address=$EMAIL" --description="Shopping Alert Notification Channel" 2>&1)"
+    sleep 2
     CHANNEL=$(echo "$NOTIFICATION_RESULT" | sed "s/.*\[\(.*\)\].*/\1/")
     gcloud alpha monitoring policies update "$POLICY_ID" --add-notification-channels="$CHANNEL"
+    sleep 2
   done
+  print_green "Alterting policy with notification channel created for $POLICY"
 done
 
 # Setup Service Accounts and grant permissions
@@ -955,6 +966,7 @@ EXISTING_TRIGGERS=$(gcloud alpha builds triggers list --filter=name:FeedLoader |
 for TRIGGER in $(echo "$EXISTING_TRIGGERS")
 do
   gcloud alpha builds triggers -q delete "$TRIGGER"
+  sleep 1
 done
 CreateTrigger deploy_functions_calculate_product_changes.yaml \
   "FeedLoader Deploy Calculate Product Change Function" \
@@ -980,6 +992,7 @@ CreateTrigger deploy_gae_build_reporter.yaml \
 CreateTrigger deploy_gae_uploader.yaml \
   "FeedLoader Deploy AppEngine uploader" \
   _KEYRING="$KEYRING"::_KEYNAME="$KEYNAME"::_GCP_PROJECT="$GCP_PROJECT"::_MERCHANT_ID="$MERCHANT_ID"::_IS_MCA="$IS_MCA"::_SHOPTIMIZER_URL="$SHOPTIMIZER_URL"::_SHOPTIMIZER_API_INTEGRATION_ON="$SHOPTIMIZER_API_INTEGRATION_ON"
+
 # Encrypt Keys
 print_green "Generating encrypted versions of the service accounts so that Cloud Build can deploy stuff securely..."
 SECRET_KEYS=(
@@ -998,6 +1011,7 @@ do
       --plaintext-file="$SECRET_KEY" \
       --ciphertext-file="$ENCRYPTED_KEY" \
     && echo "Secret key $SECRET_KEY has been successfully encrypted to $ENCRYPTED_KEY."
+  sleep 1
 done
 
 print_green "Installation and setup finished. Please deploy via Cloud Build either manually or by pushing to your source repository at ${HYPERLINK}https://source.cloud.google.com/{$GCP_PROJECT}/{$SOURCE_REPO}\ahttps://source.cloud.google.com/{$GCP_PROJECT}/{$SOURCE_REPO}${HYPERLINK}\a"
