@@ -47,9 +47,14 @@ def trigger_dag(event: Dict[str, Any],
     None. The output is written to Cloud logging.
   """
   del context
+
   client_id = os.environ.get('CLIENT_ID')
   webserver_id = os.environ.get('WEBSERVER_ID')
   dag_name = os.environ.get('DAG_NAME')
+
+  print('Attempting to trigger the Cloud Composer (Airflow) DAG named '
+        f'"{dag_name}" at {webserver_id}...')
+
   json_data = {'conf': event, 'replace_microseconds': 'false'}
   webserver_url = f'{webserver_id}/api/experimental/dags/{dag_name}/dag_runs'
   make_iap_request(webserver_url, client_id, method='POST', json=json_data)
@@ -88,7 +93,10 @@ def make_iap_request(url: str,
   # Sets the default timeout, if missing.
   kwargs.setdefault('timeout', 90)
 
+  print('Getting a token to call the API...')
   google_open_id_connect_token = id_token.fetch_id_token(Request(), client_id)
+
+  print('Calling the trigger endpoint for the Cloud Composer DAG...')
   resp = requests.request(
       method,
       url,
@@ -106,4 +114,5 @@ def make_iap_request(url: str,
             f'Bad response from application: Status: {resp.status_code}, '
             f'Headers: {resp.headers}, Text: {resp.text}'))
   else:
+    print(f'Response was: {resp.text}')
     return resp.text
