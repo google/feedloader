@@ -87,6 +87,9 @@ print_green "Finished uploading EOF. You can check the logs at ${HYPERLINK}https
 
 sleep 120
 
+# Simulate deleting the items table (which Composer should do, but for the purposes of this test, we don't wait).
+bq rm -f feed_data.items
+
 # shellcheck disable=SC2061
 FEED_FILES=$(find "${FEED_PATH%/}" -name *."${FEED_EXTENSION#.}")
 ONE_FILE=$(echo "${FEED_FILES}" | head -1)

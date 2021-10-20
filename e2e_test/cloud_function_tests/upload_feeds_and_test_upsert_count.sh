@@ -87,6 +87,9 @@ gsutil -m cp -j csv "${EOF_PATH}" gs://"${GCP_PROJECT}"-update
 print_green "Finished uploading EOF. You can check the logs at ${HYPERLINK}https://console.cloud.google.com/functions/details/us-central1/calculate_product_changes?project=${GCP_PROJECT}&tab=logs\ahttps://console.cloud.google.com/functions/details/us-central1/calculate_product_changes?project=${GCP_PROJECT}&tab=logs${HYPERLINK}\a"
 sleep 30
 
+# Simulate deleting the items table (which Composer should do, but for the purposes of this test, we don't wait).
+bq rm -f feed_data.items
+
 # shellcheck disable=SC2061
 FEED_FILES=$(find "${FEED_PATH%/}" -name *."${FEED_EXTENSION#.}")
 ONE_FILE=$(echo "${FEED_FILES}" | head -1)
