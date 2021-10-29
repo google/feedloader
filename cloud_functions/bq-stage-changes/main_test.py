@@ -22,12 +22,14 @@ from typing import List, Tuple
 import unittest.mock as mock
 
 from absl.testing import parameterized
+import aiogoogle
 from google.api_core import exceptions
-
 import iso8601
 import main
+import pytest
 
 _TEST_BQ_DATASET = 'dataset'
+_TEST_COMPLETED_FILES_PROCESSED = 150
 _TEST_COMPLETED_FILES_BUCKET = 'completed-bucket'
 _TEST_DELETES_TABLE_NAME = main._DELETES_TABLE_NAME
 _TEST_DELETES_THRESHOLD = '100000'
@@ -94,6 +96,11 @@ class CalculateProductChangesTest(parameterized.TestCase):
     self.context.event_id = '12345'
     self.context.event_type = 'gcs-event'
     self.context.timestamp = '2021-06-05T08:16:15.183Z'
+    self.mock_cleanup_completed_filenames_async = self.enter_context(
+        mock.patch.object(
+            main, '_cleanup_completed_filenames_async', autospec=True))
+    self.mock_aiogoogle = self.enter_context(
+        mock.patch.object(main, 'aiogoogle', autospec=True))
 
   @mock.patch('main._lock_exists')
   @mock.patch('main._set_table_expiration_date')
@@ -164,17 +171,15 @@ class CalculateProductChangesTest(parameterized.TestCase):
 
   @mock.patch('main._lock_exists')
   @mock.patch('main._ensure_all_files_were_imported')
-  @mock.patch('main._cleanup_completed_filenames')
   @mock.patch('main._set_table_expiration_date')
   @mock.patch('main._table_exists')
   def test_calculate_product_changes_checks_existence_of_required_tables(
       self, mock_table_exists, mock_set_table_expiration_date,
-      mock_cleanup_completed_filenames, mock_ensure_all_files_were_imported,
-      mock_lock_exists, _):
+      mock_ensure_all_files_were_imported, mock_lock_exists, _):
     del mock_set_table_expiration_date  # unused by this test.
     with mock.patch('main.storage.Client'), mock.patch('main.bigquery.Client'):
       mock_lock_exists.return_value = False
-      mock_cleanup_completed_filenames.return_value = True
+      self.mock_cleanup_completed_filenames_async.return_value = _TEST_COMPLETED_FILES_PROCESSED
       mock_ensure_all_files_were_imported.return_value = (True, [])
       fully_qualified_items_to_delete_table_name = (
           f'{_TEST_GCP_PROJECT_ID}.{_TEST_BQ_DATASET}.'
@@ -204,19 +209,17 @@ class CalculateProductChangesTest(parameterized.TestCase):
 
   @mock.patch('main._lock_exists')
   @mock.patch('main._ensure_all_files_were_imported')
-  @mock.patch('main._cleanup_completed_filenames')
   @mock.patch('main._set_table_expiration_date')
   @mock.patch('main._table_exists')
   @mock.patch('main._clean_up')
   def test_calculate_product_changes_logs_error_when_any_required_table_is_missing(
       self, mock_clean_up, mock_table_exists, mock_set_table_expiration_date,
-      mock_cleanup_completed_filenames, mock_ensure_all_files_were_imported,
-      mock_lock_exists, _):
+      mock_ensure_all_files_were_imported, mock_lock_exists, _):
     del mock_set_table_expiration_date  # unused by this test.
     with mock.patch('main.storage.Client'), mock.patch(
         'main.bigquery.Client'), self.assertLogs(level='ERROR') as mock_logging:
       mock_lock_exists.return_value = False
-      mock_cleanup_completed_filenames.return_value = True
+      self.mock_cleanup_completed_filenames_async.return_value = _TEST_COMPLETED_FILES_PROCESSED
       mock_ensure_all_files_were_imported.return_value = (True, [])
       mock_table_exists.return_value = False
 
@@ -273,20 +276,18 @@ class CalculateProductChangesTest(parameterized.TestCase):
       mock_trigger_reupload_function.assert_called()
 
   @mock.patch('main._lock_exists')
-  @mock.patch('main._cleanup_completed_filenames')
   @mock.patch('main._set_table_expiration_date')
   @mock.patch('main._clean_up')
   @mock.patch('main._archive_folder')
   @mock.patch('main._table_exists')
   def test_ensure_all_files_were_imported_returns_true_if_attempted_and_completed_file_sets_match(
       self, mock_table_exists, mock_archive_folder, mock_clean_up,
-      mock_set_table_expiration_date, mock_cleanup_completed_filenames,
-      mock_lock_exists, _):
+      mock_set_table_expiration_date, mock_lock_exists, _):
     del mock_clean_up, mock_set_table_expiration_date  # unused by this test.
     with mock.patch('main.storage.Client') as mock_storage_client, mock.patch(
         'sys.stdout', new_callable=io.StringIO) as mock_stdout:
       mock_lock_exists.return_value = False
-      mock_cleanup_completed_filenames.return_value = True
+      self.mock_cleanup_completed_filenames_async.return_value = _TEST_COMPLETED_FILES_PROCESSED
       mock_table_exists.return_value = True
       matching_fileset = ['file1', 'file2', 'file3']
       test_attempted_files, test_completed_files = _setup_fake_filesets(
@@ -301,17 +302,19 @@ class CalculateProductChangesTest(parameterized.TestCase):
       self.assertIn('All the feeds were loaded', mock_stdout.getvalue())
 
   @mock.patch('main._lock_exists')
-  @mock.patch('main._cleanup_completed_filenames')
+  @mock.patch('main._cleanup_completed_filenames_async')
   @mock.patch('main._set_table_expiration_date')
-  def test_cleanup_completed_filenames_logs_error_if_it_returned_false(
-      self, mock_set_table_expiration_date, mock_cleanup_completed_filenames,
-      mock_lock_exists, _):
+  @mock.patch('main._clean_up')
+  def test_cleanup_completed_filenames_async_logs_error_if_it_throws_exception(
+      self, mock_clean_up, mock_set_table_expiration_date,
+      mock_cleanup_completed_filenames_async, mock_lock_exists, _):
     del mock_set_table_expiration_date  # unused by this test.
     with mock.patch(
         'main.storage.Client') as mock_storage_client, self.assertLogs(
             level='ERROR') as mock_logging:
       mock_lock_exists.return_value = False
-      mock_cleanup_completed_filenames.return_value = False
+      mock_cleanup_completed_filenames_async.side_effect = (
+          exceptions.NotFound('404'))
       matching_fileset = ['file1', 'file2', 'file3']
       test_attempted_files, test_completed_files = _setup_fake_filesets(
           matching_fileset, matching_fileset)
@@ -323,6 +326,7 @@ class CalculateProductChangesTest(parameterized.TestCase):
 
       self.assertIn('Cleanup completed filenames failed.',
                     mock_logging.output[0])
+      mock_clean_up.assert_called()
 
   @mock.patch('main._lock_exists')
   def test_trigger_reupload_of_missing_feed_files_uploads_filenames_string_to_retrigger_bucket(
@@ -432,15 +436,14 @@ class CalculateProductChangesTest(parameterized.TestCase):
 
   @mock.patch('main._lock_exists')
   @mock.patch('main._ensure_all_files_were_imported')
-  @mock.patch('main._cleanup_completed_filenames')
   @mock.patch('main._table_exists')
   def test_set_table_expiration_date_sets_table_expiration(
-      self, mock_table_exists, mock_cleanup_completed_filenames,
-      mock_ensure_all_files_were_imported, mock_lock_exists, _):
+      self, mock_table_exists, mock_ensure_all_files_were_imported,
+      mock_lock_exists, _):
     with mock.patch('main.storage.Client'), mock.patch(
         'main.bigquery.Client') as mock_bigquery_client:
       mock_lock_exists.return_value = False
-      mock_cleanup_completed_filenames.return_value = True
+      self.mock_cleanup_completed_filenames_async.return_value = _TEST_COMPLETED_FILES_PROCESSED
       mock_ensure_all_files_were_imported.return_value = (True, [])
       mock_table_exists.return_value = True
       test_table_with_expiration = (
@@ -463,7 +466,7 @@ class CalculateProductChangesTest(parameterized.TestCase):
           expected_table_with_expiration, ['expires'])
 
   @mock.patch('main._lock_exists')
-  @mock.patch('main._cleanup_completed_filenames')
+  @mock.patch('main._cleanup_completed_filenames_async')
   @mock.patch('main._clean_up')
   @mock.patch('main._set_table_expiration_date')
   @mock.patch('main._archive_folder')
@@ -472,11 +475,11 @@ class CalculateProductChangesTest(parameterized.TestCase):
   @mock.patch('main._run_materialize_job')
   @mock.patch('main._count_changes')
   @mock.patch('main._create_task')
-  def test_cleanup_completed_filenames_is_called_if_ensure_all_files_were_imported_was_successful(
+  def test_cleanup_completed_filenames_async_is_called_if_ensure_all_files_were_imported_was_successful(
       self, mock_create_task, mock_count_changes, mock_run_materialize_job,
       mock_parse_bigquery_config, mock_table_exists, mock_archive_folder,
       mock_set_table_expiration_date, mock_clean_up,
-      mock_cleanup_completed_filenames, mock_lock_exists, _):
+      mock_cleanup_completed_filenames_async, mock_lock_exists, _):
     # unused by this test.
     del mock_run_materialize_job, mock_set_table_expiration_date, mock_clean_up
     with mock.patch('main.storage.Client') as mock_storage_client:
@@ -495,38 +498,7 @@ class CalculateProductChangesTest(parameterized.TestCase):
 
       main.calculate_product_changes(self.event, self.context)
 
-      mock_cleanup_completed_filenames.assert_called()
-
-  def test_delete_completed_file_deletes_file_from_completed_bucket(self, _):
-    with mock.patch('main.storage.Client') as mock_storage_client, mock.patch(
-        'main._COMPLETED_FILES_BUCKET', _TEST_COMPLETED_FILES_BUCKET):
-      test_bucket_file_to_delete = 'test_feed_file.txt'
-      mock_get_bucket = mock_storage_client.return_value.get_bucket
-
-      main._delete_completed_file(test_bucket_file_to_delete)
-
-      mock_get_bucket.assert_called_with(_TEST_COMPLETED_FILES_BUCKET)
-      mock_get_bucket.return_value.delete_blob.assert_called_with(
-          test_bucket_file_to_delete)
-
-  def test_delete_completed_file_logs_error_on_blob_not_found(self, _):
-    with mock.patch('main.storage.Client') as mock_storage_client, mock.patch(
-        'main._COMPLETED_FILES_BUCKET',
-        _TEST_COMPLETED_FILES_BUCKET), self.assertLogs(
-            level='ERROR') as mock_logging:
-      test_bucket_file_to_delete = 'test_feed_file.txt'
-      mock_get_bucket = mock_storage_client.return_value.get_bucket
-      mock_get_bucket.return_value.delete_blob.side_effect = (
-          exceptions.NotFound('404'))
-
-      main._delete_completed_file(test_bucket_file_to_delete)
-
-      mock_get_bucket.assert_called_with(_TEST_COMPLETED_FILES_BUCKET)
-      mock_get_bucket.return_value.delete_blob.assert_called_with(
-          test_bucket_file_to_delete)
-      self.assertIn(
-          f'Failed to delete {test_bucket_file_to_delete} in '
-          f'{_TEST_COMPLETED_FILES_BUCKET}.', mock_logging.output[0])
+      mock_cleanup_completed_filenames_async.assert_called()
 
   def test_archive_folder_calls_rename_blob(self, _):
     with mock.patch('main.storage.Client') as mock_storage_client:
@@ -558,15 +530,14 @@ class CalculateProductChangesTest(parameterized.TestCase):
   @mock.patch('main._lock_exists')
   @mock.patch('main._lock_eof')
   @mock.patch('main._ensure_all_files_were_imported')
-  @mock.patch('main._cleanup_completed_filenames')
   def test_calculate_product_changes_raises_upon_archive_exception(
-      self, mock_cleanup_completed_filenames,
-      mock_ensure_all_files_were_imported, mock_lock_eof, mock_lock_exists, _):
+      self, mock_ensure_all_files_were_imported, mock_lock_eof,
+      mock_lock_exists, _):
     with mock.patch('main.storage.Client') as mock_storage_client, mock.patch(
         'main.bigquery.Client'), self.assertRaises(exceptions.NotFound):
       del mock_lock_eof  # unused by this test.
       mock_lock_exists.return_value = False
-      mock_cleanup_completed_filenames.return_value = True
+      self.mock_cleanup_completed_filenames_async.return_value = _TEST_COMPLETED_FILES_PROCESSED
       mock_ensure_all_files_were_imported.return_value = (True, [])
       mock_storage_client.return_value.get_bucket.side_effect = (
           exceptions.NotFound('Bucket not found!'))
@@ -576,16 +547,15 @@ class CalculateProductChangesTest(parameterized.TestCase):
   @mock.patch('main._lock_exists')
   @mock.patch('main._lock_eof')
   @mock.patch('main._ensure_all_files_were_imported')
-  @mock.patch('main._cleanup_completed_filenames')
   @mock.patch('main._clean_up')
   def test_calculate_product_changes_calls_clean_up_upon_archive_exception(
-      self, mock_clean_up, mock_cleanup_completed_filenames,
-      mock_ensure_all_files_were_imported, mock_lock_eof, mock_lock_exists, _):
+      self, mock_clean_up, mock_ensure_all_files_were_imported, mock_lock_eof,
+      mock_lock_exists, _):
     with mock.patch('main.storage.Client') as mock_storage_client, mock.patch(
         'main.bigquery.Client'):
       del mock_lock_eof  # unused by this test.
       mock_lock_exists.return_value = False
-      mock_cleanup_completed_filenames.return_value = True
+      self.mock_cleanup_completed_filenames_async.return_value = _TEST_COMPLETED_FILES_PROCESSED
       mock_ensure_all_files_were_imported.return_value = (True, [])
       mock_storage_client.return_value.get_bucket.side_effect = (
           exceptions.NotFound('Bucket not found!'))
@@ -646,20 +616,19 @@ class CalculateProductChangesTest(parameterized.TestCase):
   @mock.patch('main._lock_exists')
   @mock.patch('main._lock_eof')
   @mock.patch('main._ensure_all_files_were_imported')
-  @mock.patch('main._cleanup_completed_filenames')
   @mock.patch('main._archive_folder')
   @mock.patch('main._parse_bigquery_config')
   @mock.patch('main._run_materialize_job')
   @mock.patch('main._clean_up')
   def test_calculate_product_changes_catches_and_logs_materialize_exception(
       self, mock_clean_up, mock_run_materialize_job, mock_parse_bigquery_config,
-      mock_archive_folder, mock_cleanup_completed_filenames,
-      mock_ensure_all_files_were_imported, mock_lock_eof, mock_lock_exists, _):
+      mock_archive_folder, mock_ensure_all_files_were_imported, mock_lock_eof,
+      mock_lock_exists, _):
     with mock.patch('main.storage.Client'), mock.patch(
         'main.bigquery.Client'), self.assertLogs(level='ERROR') as mock_logging:
       del mock_archive_folder, mock_lock_eof  # unused by this test.
       mock_lock_exists.return_value = False
-      mock_cleanup_completed_filenames.return_value = True
+      self.mock_cleanup_completed_filenames_async.return_value = _TEST_COMPLETED_FILES_PROCESSED
       mock_ensure_all_files_were_imported.return_value = (True, [])
       mock_parse_bigquery_config.return_value = ('', '')
       mock_run_materialize_job.side_effect = exceptions.GoogleAPICallError(
@@ -673,7 +642,6 @@ class CalculateProductChangesTest(parameterized.TestCase):
   @mock.patch('main._lock_exists')
   @mock.patch('main._lock_eof')
   @mock.patch('main._ensure_all_files_were_imported')
-  @mock.patch('main._cleanup_completed_filenames')
   @mock.patch('main._archive_folder')
   @mock.patch('main._parse_bigquery_config')
   @mock.patch('main._run_materialize_job')
@@ -681,12 +649,11 @@ class CalculateProductChangesTest(parameterized.TestCase):
   def test_calculate_product_changes_calls_run_materialize_job_for_required_tables(
       self, mock_count_changes, mock_run_materialize_job,
       mock_parse_bigquery_config, mock_archive_folder,
-      mock_cleanup_completed_filenames, mock_ensure_all_files_were_imported,
-      mock_lock_eof, mock_lock_exists, _):
+      mock_ensure_all_files_were_imported, mock_lock_eof, mock_lock_exists, _):
     with mock.patch('main.storage.Client'), mock.patch('main.bigquery.Client'):
       del mock_archive_folder, mock_lock_eof  # unused by this test.
       mock_lock_exists.return_value = False
-      mock_cleanup_completed_filenames.return_value = True
+      self.mock_cleanup_completed_filenames_async.return_value = _TEST_COMPLETED_FILES_PROCESSED
       mock_ensure_all_files_were_imported.return_value = (True, [])
       mock_parse_bigquery_config.return_value = ('', '')
       mock_count_changes.side_effect = [0, 0, 0]
@@ -745,7 +712,6 @@ class CalculateProductChangesTest(parameterized.TestCase):
   @mock.patch('main._lock_exists')
   @mock.patch('main._lock_eof')
   @mock.patch('main._ensure_all_files_were_imported')
-  @mock.patch('main._cleanup_completed_filenames')
   @mock.patch('main._archive_folder')
   @mock.patch('main._parse_bigquery_config')
   @mock.patch('main._run_materialize_job')
@@ -753,13 +719,12 @@ class CalculateProductChangesTest(parameterized.TestCase):
   def test_calculate_product_changes_counts_deletes_upserts_and_expirations(
       self, mock_count_changes, mock_run_materialize_job,
       mock_parse_bigquery_config, mock_archive_folder,
-      mock_cleanup_completed_filenames, mock_ensure_all_files_were_imported,
-      mock_lock_eof, mock_lock_exists, _):
+      mock_ensure_all_files_were_imported, mock_lock_eof, mock_lock_exists, _):
     with mock.patch('main.storage.Client'), mock.patch('main.bigquery.Client'):
       # unused by this test.
       del mock_run_materialize_job, mock_archive_folder, mock_lock_eof
       mock_lock_exists.return_value = False
-      mock_cleanup_completed_filenames.return_value = True
+      self.mock_cleanup_completed_filenames_async.return_value = _TEST_COMPLETED_FILES_PROCESSED
       mock_ensure_all_files_were_imported.return_value = (True, [])
       mock_parse_bigquery_config.return_value = ('', '')
       mock_count_changes.side_effect = [100, 1000, 10]
@@ -781,21 +746,20 @@ class CalculateProductChangesTest(parameterized.TestCase):
   @mock.patch('main._lock_exists')
   @mock.patch('main._lock_eof')
   @mock.patch('main._ensure_all_files_were_imported')
-  @mock.patch('main._cleanup_completed_filenames')
   @mock.patch('main._archive_folder')
   @mock.patch('main._parse_bigquery_config')
   @mock.patch('main._run_materialize_job')
   def test_calculate_product_changes_logs_errors_if_count_changes_fails(
       self, mock_run_materialize_job, mock_parse_bigquery_config,
-      mock_archive_folder, mock_cleanup_completed_filenames,
-      mock_ensure_all_files_were_imported, mock_lock_eof, mock_lock_exists, _):
+      mock_archive_folder, mock_ensure_all_files_were_imported, mock_lock_eof,
+      mock_lock_exists, _):
     with mock.patch('main.storage.Client'), mock.patch(
         'main.bigquery.Client') as mock_bigquery_client, self.assertLogs(
             level='ERROR') as mock_logging:
       # unused by this test.
       del mock_run_materialize_job, mock_archive_folder, mock_lock_eof
       mock_lock_exists.return_value = False
-      mock_cleanup_completed_filenames.return_value = True
+      self.mock_cleanup_completed_filenames_async.return_value = _TEST_COMPLETED_FILES_PROCESSED
       mock_ensure_all_files_were_imported.return_value = (True, [])
       mock_parse_bigquery_config.return_value = ('', '')
       mock_bigquery_client.query.return_value.result.side_effect = [[], [], []]
@@ -810,7 +774,6 @@ class CalculateProductChangesTest(parameterized.TestCase):
   @mock.patch('main._lock_exists')
   @mock.patch('main._lock_eof')
   @mock.patch('main._ensure_all_files_were_imported')
-  @mock.patch('main._cleanup_completed_filenames')
   @mock.patch('main._archive_folder')
   @mock.patch('main._parse_bigquery_config')
   @mock.patch('main._run_materialize_job')
@@ -818,15 +781,14 @@ class CalculateProductChangesTest(parameterized.TestCase):
   def test_calculate_product_changes_logs_error_if_deletes_threshold_crossed(
       self, mock_count_changes, mock_run_materialize_job,
       mock_parse_bigquery_config, mock_archive_folder,
-      mock_cleanup_completed_filenames, mock_ensure_all_files_were_imported,
-      mock_lock_eof, mock_lock_exists, _):
+      mock_ensure_all_files_were_imported, mock_lock_eof, mock_lock_exists, _):
     with mock.patch('main.storage.Client'), mock.patch(
         'main.bigquery.Client'), self.assertLogs(level='ERROR') as mock_logging:
       # unused by this test.
       del mock_run_materialize_job, mock_archive_folder, mock_lock_eof
       test_deletes_count = int(_TEST_DELETES_THRESHOLD) + 1
       mock_lock_exists.return_value = False
-      mock_cleanup_completed_filenames.return_value = True
+      self.mock_cleanup_completed_filenames_async.return_value = _TEST_COMPLETED_FILES_PROCESSED
       mock_ensure_all_files_were_imported.return_value = (True, [])
       mock_parse_bigquery_config.return_value = ('', '')
       mock_count_changes.side_effect = [test_deletes_count, 0, 0]
@@ -840,7 +802,6 @@ class CalculateProductChangesTest(parameterized.TestCase):
   @mock.patch('main._lock_exists')
   @mock.patch('main._lock_eof')
   @mock.patch('main._ensure_all_files_were_imported')
-  @mock.patch('main._cleanup_completed_filenames')
   @mock.patch('main._archive_folder')
   @mock.patch('main._parse_bigquery_config')
   @mock.patch('main._run_materialize_job')
@@ -848,15 +809,14 @@ class CalculateProductChangesTest(parameterized.TestCase):
   def test_calculate_product_changes_logs_error_if_upserts_threshold_crossed(
       self, mock_count_changes, mock_run_materialize_job,
       mock_parse_bigquery_config, mock_archive_folder,
-      mock_cleanup_completed_filenames, mock_ensure_all_files_were_imported,
-      mock_lock_eof, mock_lock_exists, _):
+      mock_ensure_all_files_were_imported, mock_lock_eof, mock_lock_exists, _):
     with mock.patch('main.storage.Client'), mock.patch(
         'main.bigquery.Client'), self.assertLogs(level='ERROR') as mock_logging:
       # unused by this test.
       del mock_run_materialize_job, mock_archive_folder, mock_lock_eof
       test_upserts_count = int(_TEST_UPSERTS_THRESHOLD) + 1
       mock_lock_exists.return_value = False
-      mock_cleanup_completed_filenames.return_value = True
+      self.mock_cleanup_completed_filenames_async.return_value = _TEST_COMPLETED_FILES_PROCESSED
       mock_ensure_all_files_were_imported.return_value = (True, [])
       mock_parse_bigquery_config.return_value = ('', '')
       mock_count_changes.side_effect = [0, test_upserts_count, 0]
@@ -868,7 +828,7 @@ class CalculateProductChangesTest(parameterized.TestCase):
           f'{_TEST_UPSERTS_THRESHOLD}', mock_logging.output[0])
 
   @mock.patch('main._lock_exists')
-  @mock.patch('main._cleanup_completed_filenames')
+  @mock.patch('main._cleanup_completed_filenames_async')
   @mock.patch('main._clean_up')
   @mock.patch('main._set_table_expiration_date')
   @mock.patch('main._archive_folder')
@@ -882,10 +842,10 @@ class CalculateProductChangesTest(parameterized.TestCase):
       self, mock_run_dml_job, mock_create_task, mock_count_changes,
       mock_run_materialize_job, mock_parse_bigquery_config, mock_table_exists,
       mock_archive_folder, mock_set_table_expiration_date, mock_clean_up,
-      mock_cleanup_completed_filenames, mock_lock_exists, _):
+      mock_cleanup_completed_filenames_async, mock_lock_exists, _):
     # unused by this test.
     del (mock_run_materialize_job, mock_set_table_expiration_date,
-         mock_cleanup_completed_filenames)
+         mock_cleanup_completed_filenames_async)
     with mock.patch('main.storage.Client') as mock_storage_client, mock.patch(
         'main.bigquery.Client'):
       mock_table_exists.return_value = True
@@ -908,7 +868,7 @@ class CalculateProductChangesTest(parameterized.TestCase):
       mock_run_dml_job.assert_called()
 
   @mock.patch('main._lock_exists')
-  @mock.patch('main._cleanup_completed_filenames')
+  @mock.patch('main._cleanup_completed_filenames_async')
   @mock.patch('main._clean_up')
   @mock.patch('main._set_table_expiration_date')
   @mock.patch('main._archive_folder')
@@ -921,10 +881,10 @@ class CalculateProductChangesTest(parameterized.TestCase):
       self, mock_create_task, mock_count_changes, mock_run_materialize_job,
       mock_parse_bigquery_config, mock_table_exists, mock_archive_folder,
       mock_set_table_expiration_date, mock_clean_up,
-      mock_cleanup_completed_filenames, mock_lock_exists, _):
+      mock_cleanup_completed_filenames_async, mock_lock_exists, _):
     # unused by this test.
     del (mock_run_materialize_job, mock_set_table_expiration_date,
-         mock_cleanup_completed_filenames)
+         mock_cleanup_completed_filenames_async)
     with mock.patch('main.storage.Client') as mock_storage_client, mock.patch(
         'main.bigquery.Client'):
       mock_table_exists.return_value = True
@@ -950,7 +910,7 @@ class CalculateProductChangesTest(parameterized.TestCase):
           clean_items_table=False)
 
   @mock.patch('main._lock_exists')
-  @mock.patch('main._cleanup_completed_filenames')
+  @mock.patch('main._cleanup_completed_filenames_async')
   @mock.patch('main._clean_up')
   @mock.patch('main._set_table_expiration_date')
   @mock.patch('main._archive_folder')
@@ -963,9 +923,9 @@ class CalculateProductChangesTest(parameterized.TestCase):
       self, mock_create_task, mock_count_changes, mock_run_materialize_job,
       mock_parse_bigquery_config, mock_table_exists, mock_archive_folder,
       mock_set_table_expiration_date, mock_clean_up,
-      mock_cleanup_completed_filenames, mock_lock_exists, _):
+      mock_cleanup_completed_filenames_async, mock_lock_exists, _):
     # unused by this test.
-    del (mock_cleanup_completed_filenames, mock_clean_up,
+    del (mock_cleanup_completed_filenames_async, mock_clean_up,
          mock_set_table_expiration_date, mock_run_materialize_job)
     test_delete_count = 100
     with mock.patch('main.storage.Client') as mock_storage_client, mock.patch(
@@ -1024,6 +984,31 @@ class CalculateProductChangesTest(parameterized.TestCase):
 
       mock_cloud_tasks_client.return_value.create_task.assert_not_called()
       self.assertFalse(create_task_result)
+
+  @pytest.mark.asyncio
+  async def test_delete_completed_files_async_deletes_files_calls_delete_asynchronously(
+      self):
+    mock_detect_default_creds_source = mock.AsyncMock(return_value=None)
+    mock_service_account_manager = self.mock_aiogoogle.Aiogoogle.return_value.service_account_manager
+    mock_service_account_manager.detect_default_creds_source = mock_detect_default_creds_source
+
+    mock_aiogoogle_discover = mock.AsyncMock(return_value=mock.MagicMock())
+    self.mock_aiogoogle.discover = mock_aiogoogle_discover
+
+    mock_async_storage_client = mock.AsyncMock(return_value=mock.MagicMock())
+    mock_async_storage_client.objects.delete.return_value = (
+        aiogoogle.models.Request())
+    mock_aiogoogle_as_service_account = mock.AsyncMock(
+        return_value=mock_async_storage_client)
+    self.mock_aiogoogle.as_service_account = mock_aiogoogle_as_service_account
+
+    test_completed_files = ['file1', 'file2', 'file3']
+
+    await main._delete_completed_files_async(test_completed_files)
+
+    mock_detect_default_creds_source.assert_awaited()
+    mock_aiogoogle_discover.assert_awaited()
+    mock_aiogoogle_as_service_account.assert_awaited()
 
 
 def _setup_fake_filesets(attempted_filenames: List[str],

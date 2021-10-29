@@ -14,15 +14,16 @@
 # limitations under the License.
 
 """CF that triggers on GCS bucket upload to calculate product diffs."""
+import asyncio
 import datetime
 import enum
 import json
 import logging
-import multiprocessing
 import os
 import string
 from typing import Any, Dict, List, Tuple
 
+import aiogoogle
 from google.api_core import exceptions
 from google.cloud import bigquery
 from google.cloud import storage
@@ -52,6 +53,15 @@ _TASK_QUEUE_NAME = 'trigger-initiator'
 _UPSERTS_TABLE_NAME = 'items_to_upsert'
 _WRITE_DISPOSITION = enum.Enum('WRITE_DISPOSITION',
                                'WRITE_TRUNCATE WRITE_APPEND WRITE_EMPTY')
+
+_SERVICE_ACCOUNT_CREDS = aiogoogle.auth.creds.ServiceAccountCreds(
+    scopes=[
+        'https://www.googleapis.com/auth/devstorage.read_only',
+        'https://www.googleapis.com/auth/devstorage.read_write',
+        'https://www.googleapis.com/auth/devstorage.full_control',
+        'https://www.googleapis.com/auth/cloud-platform.read-only',
+        'https://www.googleapis.com/auth/cloud-platform',
+    ],)
 
 
 def calculate_product_changes(
@@ -132,20 +142,13 @@ def calculate_product_changes(
     print('File import check successful. Proceeding to cleanup completed '
           'filenames from Cloud Storage...')
     try:
-      cleanup_completed_files_successful = (
-          _cleanup_completed_filenames(storage_client))
-      if not cleanup_completed_files_successful:
-        logging.error(
-            RuntimeError(
-                'Cleanup completed filenames failed. Cleaning up and exiting...'
-            ))
-        return
-    except Exception as cleanup_completed_files_error:  
+      num_files_cleaned = _cleanup_completed_filenames_async(storage_client)
+      print(f'{num_files_cleaned} files deleted from {_COMPLETED_FILES_BUCKET}')
+    except Exception:  
       # refex: disable=pytotw.037
       logging.error(
           RuntimeError(
-              'Cleanup completed filenames failed. Cleaning up and exiting...'),
-          cleanup_completed_files_error)
+              'Cleanup completed filenames failed. Cleaning up and exiting...'))
       _clean_up(storage_client, bigquery_client, lock_bucket,
                 fully_qualified_items_table_name)
       return
@@ -535,43 +538,40 @@ def _get_current_time_in_utc() -> datetime.datetime:
   return datetime.datetime.now(pytz.utc)
 
 
-def _cleanup_completed_filenames(storage_client: storage.client.Client) -> bool:
-  """Deletes all files from the completed bucket.
+def _cleanup_completed_filenames_async(
+    storage_client: storage.client.Client) -> int:
+  """Asynchronously deletes the files in the GCS completed files bucket.
 
   Args:
-    storage_client: The Cloud Storage python client instance.
+    storage_client: The Cloud Storage client instance.
 
   Returns:
-    True if all deletions succeeded, otherwise False.
+    The number of files that were sent to be cleaned up.
   """
-  completed_file_blobs = storage_client.list_blobs(_COMPLETED_FILES_BUCKET)
-  with multiprocessing.Pool() as pool:
-    results = list(
-        pool.imap_unordered(_delete_completed_file,
-                            (blob.name for blob in completed_file_blobs)))
-    return all(results)
-  return False
+  completed_feed_files = list(
+      storage_client.list_blobs(_COMPLETED_FILES_BUCKET))
+  completed_filenames = set(feed.name for feed in completed_feed_files)
+  asyncio.run(_delete_completed_files_async(completed_filenames))
+  return len(completed_feed_files)
 
 
-def _delete_completed_file(filename: str) -> bool:
+async def _delete_completed_files_async(filenames: List[str]) -> None:
   """Deletes the specified file from the completed files bucket.
 
   Args:
-    filename: The name of the blob file to delete.
-
-  Returns:
-    True if the file was deleted successfully, otherwise False.
+    filenames: The name of the blob file to delete.
   """
-  storage_client = storage.Client()
-  completed_files_bucket = storage_client.get_bucket(_COMPLETED_FILES_BUCKET)
-  try:
-    completed_files_bucket.delete_blob(filename)
-  except exceptions.NotFound:
-    logging.error(
-        exceptions.NotFound(
-            f'Failed to delete {filename} in {_COMPLETED_FILES_BUCKET}.'))
-    return False
-  return True
+  aiogoogle_client = aiogoogle.Aiogoogle(
+      service_account_creds=_SERVICE_ACCOUNT_CREDS)
+  await aiogoogle_client.service_account_manager.detect_default_creds_source()
+
+  async with aiogoogle:
+    async_storage_client = await aiogoogle.discover('storage', 'v1')
+    delete_requests = (
+        async_storage_client.objects.delete(
+            bucket=_COMPLETED_FILES_BUCKET, object=filename)
+        for filename in filenames)
+    await aiogoogle.as_service_account(*delete_requests)
 
 
 def _archive_folder(storage_client: storage.client.Client,
@@ -603,9 +603,11 @@ def _clean_up(storage_client: storage.client.Client,
 
   if eof_lock_file:
     eof_lock_file.delete()
+    print(f'{_LOCK_FILE_NAME} file deleted during clean-up.')
 
   if clean_items_table:
     bigquery_client.delete_table(items_table_name, not_found_ok=True)
+    print(f'Table {items_table_name} deleted during clean-up.')
 
 
 def _parse_bigquery_config() -> Tuple[str, str]:
@@ -642,8 +644,9 @@ def _run_materialize_job(bigquery_client: bigquery.client.Client,
       query,
       job_config=big_query_job_config,
   )
-  query_job.result()
-  print(f'BigQuery materialize job finished for {destination_table}.')
+  result = query_job.result()
+  print(f'BigQuery materialize job finished for {destination_table}. '
+        f'Rows Written: {result.total_rows}')
 
 
 def _count_changes(bigquery_client: bigquery.client.Client, query: str,
