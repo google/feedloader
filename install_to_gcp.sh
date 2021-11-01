@@ -856,7 +856,7 @@ ALERT_POLICIES=(
 print_green "Recreating alerting policies..."
 for POLICY in "${ALERT_POLICIES[@]}"
 do
-  print_green "Recreating alterting policy $POLICY..."
+  print_green "Recreating alerting policy $POLICY..."
   POLICY_RESULT="$(gcloud alpha monitoring policies create --policy-from-file="stackdriver_alerts/$POLICY" 2>&1)"
   sleep 2
   POLICY_ID=$(echo "$POLICY_RESULT" | sed "s/.*\[\(.*\)\].*/\1/")
@@ -868,7 +868,7 @@ do
     gcloud alpha monitoring policies update "$POLICY_ID" --add-notification-channels="$CHANNEL"
     sleep 2
   done
-  print_green "Alterting policy with notification channel created for $POLICY"
+  print_green "Alerting policy with notification channel created for $POLICY"
 done
 
 # Setup Service Accounts and grant permissions
