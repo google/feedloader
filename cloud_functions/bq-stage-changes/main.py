@@ -565,13 +565,13 @@ async def _delete_completed_files_async(filenames: List[str]) -> None:
       service_account_creds=_SERVICE_ACCOUNT_CREDS)
   await aiogoogle_client.service_account_manager.detect_default_creds_source()
 
-  async with aiogoogle:
-    async_storage_client = await aiogoogle.discover('storage', 'v1')
+  async with aiogoogle_client:
+    async_storage_client = await aiogoogle_client.discover('storage', 'v1')
     delete_requests = (
         async_storage_client.objects.delete(
             bucket=_COMPLETED_FILES_BUCKET, object=filename)
         for filename in filenames)
-    await aiogoogle.as_service_account(*delete_requests)
+    await aiogoogle_client.as_service_account(*delete_requests)
 
 
 def _archive_folder(storage_client: storage.client.Client,
