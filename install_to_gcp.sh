@@ -1,4 +1,4 @@
-# Copyright 2021 Google LLC.
+# Copyright 2022 Google LLC.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -956,7 +956,7 @@ CreateTrigger() {
   gcloud alpha builds triggers create cloud-source-repositories \
   --build-config=cicd/"$TARGET_TRIGGER" \
   --repo="$SOURCE_REPO" \
-  --branch-pattern=master \
+  --branch-pattern=main \
   --description="$DESCRIPTION" \
   --substitutions ^::^"$ENV_VARIABLES"
 }
