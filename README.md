@@ -130,7 +130,7 @@ for most use cases of Feedloader.
 
 -   Run the initialization script in the root directory:
 
-    `bash initialize_project.sh`
+    `bash install_to_gcp.sh`
 
     -   **Due to dependencies on Cloud Composer environment initialization, the
         installation could take a long time (~45 minutes).**
