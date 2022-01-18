@@ -1,3 +1,4 @@
+
 # FeedLoader
 
 _Copyright 2019 Google LLC. This solution, including any related sample code or
@@ -23,6 +24,7 @@ usage in connection with your business, if at all._
     *   [Configuration](#configuration)
     *   [Installation](#installation)
     *   [Usage](#usage)
+    *   [MCID-Per-Item Feature](#mcid-per-item-feature)
     *   [Optimizations](#optimizations)
     *   [Testing](#testing)
     +   [Unit Tests](#unit-tests)
@@ -118,6 +120,8 @@ for most use cases of Feedloader.
 
         `{"csvHeader": "google_merchant_id", "bqColumn": "google_merchant_id",
         "columnType": "STRING"}`
+
+        See the section [MCID-Per-Item](#mcid-per-item-feature) for details.
 
 -   Edit the env.sh file in the repository root directory and supply values for
     all of the variables.
@@ -229,6 +233,36 @@ for most use cases of Feedloader.
 -   Feedloader will process items that require changes in Content API (new
     items, updated items, deleted items, and items about to expire), and send
     them to GMC. You can view the results in your GMC UI.
+
+## MCID-Per-Item Feature
+**Important: This feature is only supported when all MCIDs fall under a single
+MCA**
+
+Some users of Feedloader will want to send different items within a single feed
+file to more than one Merchant Center ID ("MCID").
+
+For these cases, Feedloader supports the addition of an optional
+“google_merchant_id” column in the feed files: a column with the header
+"google_merchant_id" may be added to your feeds, which specifies the destination
+Merchant Center to route the Content API call for that item row.
+
+Feedloader will automatically handle routing of this item to the MC ID via
+Content API (if an MCID was specified for that item row).
+
+This value will be used as the account id specified in calls to Content API and
+will determine the destination account that items are sent to.
+
+The “google_merchant_id” column is loaded into BigQuery in the same way as other
+columns.
+
+Feedloader's behavior when this column is included in the feed file differs
+depending on whether the environment variable "IS_MCA" is set to True or False.
+This behavior is defined in the below table:
+
+||IS_MCA = True|IS_MCA = False|
+|:----|:----|:----|
+|**"google_merchant_id" column is missing or value is equivalent to boolean False (empty, 0, etc)**|Item is "skipped" in processing and not added to the batch + a warning is logged| The env var "DEFAULT_MERCHANT_ID" is used as the destination merchant_id in API calls|
+|**"google_merchant_id" exists and is set to a value not equivalent to boolean False**|The "google_merchant_id" value in each row of the feed file is used as the destination merchant_id in API calls| The env var "DEFAULT_MERCHANT_ID" is used as the destination merchant_id in API calls|
 
 ## Optimizations
 
