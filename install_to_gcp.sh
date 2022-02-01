@@ -897,9 +897,6 @@ gcloud projects add-iam-policy-binding "$GCP_PROJECT" \
   --role roles/iam.serviceAccountUser
 gcloud projects add-iam-policy-binding "$GCP_PROJECT" \
   --member serviceAccount:"$PROJECT_NUMBER"@cloudbuild.gserviceaccount.com \
-  --role roles/cloudfunctions.developer
-gcloud projects add-iam-policy-binding "$GCP_PROJECT" \
-  --member serviceAccount:"$PROJECT_NUMBER"@cloudbuild.gserviceaccount.com \
   --role roles/appengine.appAdmin
 gcloud projects add-iam-policy-binding "$GCP_PROJECT" \
   --member serviceAccount:"$PROJECT_NUMBER"@cloudbuild.gserviceaccount.com \
