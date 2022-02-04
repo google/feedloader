@@ -1,0 +1,69 @@
+# Copyright 2022 Google LLC.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+steps:
+- name: gcr.io/cloud-builders/gcloud
+  args:
+  - kms
+  - decrypt
+  - --ciphertext-file=appengine/initiator/config/service_account.json.enc
+  - --plaintext-file=appengine/initiator/config/service_account.json
+  - --location=global
+  - --keyring=${_KEYRING}
+  - --key=${_KEYNAME}
+- name: gcr.io/cloud-builders/gcloud
+  args:
+  - kms
+  - decrypt
+  - --ciphertext-file=appengine/uploader/config/gcp_service_account.json.enc
+  - --plaintext-file=appengine/uploader/config/gcp_service_account.json
+  - --location=global
+  - --keyring=${_KEYRING}
+  - --key=${_KEYNAME}
+- name: gcr.io/cloud-builders/gcloud
+  args:
+  - kms
+  - decrypt
+  - --ciphertext-file=appengine/uploader/config/mc_service_account.json.enc
+  - --plaintext-file=appengine/uploader/config/mc_service_account.json
+  - --location=global
+  - --keyring=${_KEYRING}
+  - --key=${_KEYNAME}
+- name: 'gcr.io/cloud-builders/gcloud'
+  entrypoint: '/bin/bash'
+  args: ['-c', 'bash appengine/initiator/app.sh prod ${_GCP_PROJECT} ${_REGION} ${_TRIGGER_COMPLETION_BUCKET} ${_UPDATE_BUCKET} ${_LOCK_BUCKET}']
+  id: deploy_default
+- name: gcr.io/cloud-builders/gcloud
+  entrypoint: /bin/sh
+  args:
+  - -c
+  - bash appengine/uploader/app.sh prod ${_GCP_PROJECT} ${_IS_MCA} ${_MERCHANT_ID} ${_SHOPTIMIZER_API_INTEGRATION_ON} ${_SHOPTIMIZER_URL}
+  waitFor:
+  - deploy_default
+- name: 'gcr.io/cloud-builders/gcloud'
+  entrypoint: '/bin/bash'
+  args: ['-c', 'gcloud pubsub subscriptions update ${_CLOUD_BUILD_SUBSCRIPTION} --push-endpoint https://build-reporter-dot-${_GCP_PROJECT}.appspot.com/pubsub/push']
+  id: update_reporter_pubsub
+- name: 'gcr.io/cloud-builders/gcloud'
+  entrypoint: '/bin/bash'
+  args: ['-c', 'bash appengine/build_reporter/app.sh prod ${_GCP_PROJECT} ${_BUILD_NOTIFICATION_EMAILS}']
+  waitFor:
+  - deploy_default
+  - update_reporter_pubsub
+- name: 'gcr.io/cloud-builders/gcloud'
+  entrypoint: '/bin/bash'
+  args: ['-c', 'apt-get -y update && apt-get -y install python2.7 && curl https://bootstrap.pypa.io/pip/2.7/get-pip.py --output get-pip.py && python2 get-pip.py && pip2 install --upgrade pip==20.3.4 && bash appengine/mailer/app.sh prod ${_GCP_PROJECT} ${_PUBSUB_TOKEN} ${_FINISH_EMAILS}']
+  waitFor:
+  - deploy_default
+timeout: 3600s
