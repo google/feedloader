@@ -23,6 +23,7 @@ BQ_FEED_DATASET=feed_data
 BQ_MONITOR_DATASET=monitor_data
 CLOUD_COMPOSER_ENV_NAME=process-completion-monitor
 CLOUD_COMPOSER_ZONE=us-central1-f
+CLOUD_COMPOSER_IMAGE_VERSION=composer-1.17.8-airflow-1.10.15
 DAG_ID=completion_monitor
 EXPIRATION_TRACKING_TABLE_ID=items_expiration_tracking
 ITEM_RESULTS_TABLE_ID=item_results
@@ -353,6 +354,7 @@ then
   echo "Cloud Composer Environment $CLOUD_COMPOSER_ENV_NAME already exists"
 else
   gcloud composer environments create "$CLOUD_COMPOSER_ENV_NAME" \
+    --image-version="$CLOUD_COMPOSER_IMAGE_VERSION" \
     --airflow-configs=core-default_timezone=Asia/Tokyo \
     --location "$REGION" \
     --zone "$CLOUD_COMPOSER_ZONE" \
@@ -361,9 +363,13 @@ else
     --env-variables PROJECT_ID="$GCP_PROJECT",LOCATION="$REGION",PUBSUB_TOPIC="$PUBSUB_TOPIC_MAILER"
 fi
 
-COMPOSER_UPDATE_RESULT=$(gcloud composer environments update "$CLOUD_COMPOSER_ENV_NAME" \
- --update-pypi-packages-from-file composer/completion_monitor/requirements.txt \
- --location "$REGION" 2>&1)
+gcloud composer environments update "$CLOUD_COMPOSER_ENV_NAME" \
+  --location "$REGION" \
+  --update-pypi-packages-from-file composer/completion_monitor/requirements.txt
+
+gcloud composer environments update "$CLOUD_COMPOSER_ENV_NAME" \
+  --location "$REGION" \
+  --update-airflow-configs=api-auth_backend=airflow.api.auth.backend.default
 
 sed -e "s/<DAG_ID>/$DAG_ID/g" \
   -e "s/<GCP_PROJECT_ID>/$GCP_PROJECT/g" \

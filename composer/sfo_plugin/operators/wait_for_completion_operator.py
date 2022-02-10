@@ -71,7 +71,7 @@ class WaitForCompletionOperator(models.BaseOperator):
         queue=self._queue_name)
     for _ in range(self._try_count_limit):
       try:
-        task_list = list(tasks_client.list_tasks(parent))
+        task_list = list(tasks_client.list_tasks(parent=parent))
       except (exceptions.GoogleAPICallError,
               exceptions.RetryError) as api_error:
         raise airflow.AirflowException(

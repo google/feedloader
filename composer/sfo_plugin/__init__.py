@@ -17,7 +17,6 @@
 
 from airflow.plugins_manager import AirflowPlugin
 
-from sfo_plugin.hooks import bigquery_hook
 from sfo_plugin.operators import bq_to_pubsub_operator
 from sfo_plugin.operators import clean_up_operator
 from sfo_plugin.operators import wait_for_completion_operator
@@ -31,4 +30,3 @@ class SFOPlugin(AirflowPlugin):
       bq_to_pubsub_operator.GetRunResultsAndTriggerReportingOperator,
       wait_for_completion_operator.WaitForCompletionOperator
   ]
-  hooks = [bigquery_hook.BigQueryHook]

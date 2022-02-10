@@ -26,9 +26,17 @@ steps:
   entrypoint: '/bin/bash'
   args: ['-c', 'gcloud pubsub subscriptions update ${_MAILER_SUBSCRIPTION} --push-endpoint https://mailer-dot-${_GCP_PROJECT}.appspot.com/pubsub/push?token=${_PUBSUB_TOKEN}']
 - name: 'gcr.io/cloud-builders/gcloud'
-  args: ['composer', 'environments', 'storage', 'plugins', 'import', '--environment', '${_CLOUD_COMPOSER_ENV_NAME}', '--location', '${_REGION}', '--source', 'composer/sfo_plugin']
+  args: ['composer', 'environments', 'storage', 'plugins', 'import', '--environment', '${_CLOUD_COMPOSER_ENV_NAME}', '--location', '${_REGION}', '--source', 'composer/sfo_plugin/operators/bq_to_pubsub_operator.py', '--destination', 'sfo_plugin/operators/']
 - name: 'gcr.io/cloud-builders/gcloud'
-  args: ['composer', 'environments', 'storage', 'dags', 'import', '--environment', '${_CLOUD_COMPOSER_ENV_NAME}', '--location', '${_REGION}', '--source', 'composer/completion_monitor/dags']
+  args: ['composer', 'environments', 'storage', 'plugins', 'import', '--environment', '${_CLOUD_COMPOSER_ENV_NAME}', '--location', '${_REGION}', '--source', 'composer/sfo_plugin/operators/clean_up_operator.py', '--destination', 'sfo_plugin/operators/']
+- name: 'gcr.io/cloud-builders/gcloud'
+  args: ['composer', 'environments', 'storage', 'plugins', 'import', '--environment', '${_CLOUD_COMPOSER_ENV_NAME}', '--location', '${_REGION}', '--source', 'composer/sfo_plugin/operators/wait_for_completion_operator.py', '--destination', 'sfo_plugin/operators/']
+- name: 'gcr.io/cloud-builders/gcloud'
+  args: ['composer', 'environments', 'storage', 'plugins', 'import', '--environment', '${_CLOUD_COMPOSER_ENV_NAME}', '--location', '${_REGION}', '--source', 'composer/sfo_plugin/operators/queries', '--destination', 'sfo_plugin/operators']
+- name: 'gcr.io/cloud-builders/gcloud'
+  args: ['composer', 'environments', 'storage', 'dags', 'import', '--environment', '${_CLOUD_COMPOSER_ENV_NAME}', '--location', '${_REGION}', '--source', 'composer/completion_monitor/dags/completion_monitor_dag.py']
+- name: 'gcr.io/cloud-builders/gcloud'
+  args: ['composer', 'environments', 'storage', 'dags', 'import', '--environment', '${_CLOUD_COMPOSER_ENV_NAME}', '--location', '${_REGION}', '--source', 'composer/completion_monitor/dags/queries']
 - name: 'gcr.io/cloud-builders/gcloud'
   args: ['composer', 'environments', 'storage', 'data', 'import', '--environment', '${_CLOUD_COMPOSER_ENV_NAME}', '--location', '${_REGION}', '--source', 'composer/completion_monitor/config']
 - name: 'gcr.io/cloud-builders/gcloud'

@@ -51,7 +51,7 @@ class WaitForCompletionOperatorTest(unittest.TestCase):
     self._context = mock.MagicMock()
     self._mock_tasks_client = mock.patch(
         'google.cloud.tasks.CloudTasksClient.from_service_account_json',
-        autospec=True).start()
+        autospec=False).start()
     self._mock_time_sleep = mock.patch('time.sleep').start()
     self.addCleanup(mock.patch.stopall)
 

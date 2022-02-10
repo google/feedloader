@@ -22,8 +22,8 @@ import unittest.mock as mock
 from airflow import exceptions
 from airflow import models
 
+from airflow.contrib.hooks import bigquery_hook
 from airflow.contrib.hooks import gcs_hook
-from sfo_plugin.hooks import bigquery_hook
 from sfo_plugin.operators import clean_up_operator
 
 _DAG_ID = 'test_dag'
@@ -53,11 +53,12 @@ class CleanUpOperatorTest(unittest.TestCase):
 
   def test_execute_should_delete_items_table(self):
     self._task.execute(self._context)
-    self._mock_bq_hook.return_value.delete_table.assert_called_with(
-        dataset_id=_DATASET_ID, table_id=_TABLE_ID)
+    self._mock_bq_hook.return_value.get_cursor.return_value.run_table_delete.assert_called_with(
+        deletion_dataset_table=f'{_DATASET_ID}.{_TABLE_ID}',
+        ignore_if_missing=True)
 
   def test_execute_should_stop_airflow_when_getting_api_error(self):
-    self._mock_bq_hook.return_value.delete_table.side_effect = bigquery_hook.BigQueryApiError(
+    self._mock_bq_hook.return_value.get_cursor.return_value.run_table_delete.side_effect = Exception(
     )
     with self.assertRaises(exceptions.AirflowException):
       self._task.execute(self._context)

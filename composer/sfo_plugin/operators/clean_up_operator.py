@@ -20,10 +20,9 @@ from typing import Any, Mapping, Text
 
 from airflow import exceptions
 from airflow import models
+from airflow.contrib.hooks import bigquery_hook
 from airflow.contrib.hooks import gcs_hook
 from google.cloud import exceptions as cloud_exceptions
-
-from sfo_plugin.hooks import bigquery_hook
 
 
 class CleanUpOperator(models.BaseOperator):
@@ -56,16 +55,20 @@ class CleanUpOperator(models.BaseOperator):
        airflow.AirflowException: Raised when the task failed to call BigQuery
         API.
     """
-    bq_hook = bigquery_hook.BigQueryHook()
-    storage_hook = gcs_hook.GoogleCloudStorageHook()
+    logging.info('Starting cleanup routine...')
     try:
-      logging.info('Starting cleanup routine...')
-      bq_hook.delete_table(dataset_id=self._dataset_id, table_id=self._table_id)
-    except bigquery_hook.BigQueryApiError as bq_api_error:
+      bq_hook = bigquery_hook.BigQueryHook()
+      bq_cursor = bq_hook.get_cursor()
+      table_name = f'{self._dataset_id}.{self._table_id}'
+      bq_cursor.run_table_delete(
+          deletion_dataset_table=table_name, ignore_if_missing=True)
+      logging.info('Successfully deleted table: %s', table_name)
+    except Exception as bq_api_error:
       raise exceptions.AirflowException(
           'BigQuery API returned an error while deleting the items table.'
       ) from bq_api_error
     try:
+      storage_hook = gcs_hook.GoogleCloudStorageHook()
       storage_hook.delete(bucket=self._bucket_id, object='EOF.lock')
       logging.info('Successfully deleted the EOF.lock file.')
     except cloud_exceptions.GoogleCloudError as gcs_api_error:
