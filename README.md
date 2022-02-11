@@ -1,4 +1,3 @@
-
 # FeedLoader
 
 _Copyright 2019 Google LLC. This solution, including any related sample code or
@@ -15,22 +14,23 @@ accept all risks, known and unknown, associated with its usage, including with
 respect to your deployment of any portion of this solution in your systems, or
 usage in connection with your business, if at all._
 
--   [FeedLoader](#feedloader)
-    *   [Introduction](#introduction)
-    +   [What does it do?](#what-does-it-do-)
-    +   [Who is it for?](#who-is-it-for-)
-    +   [What does it cost?](#what-does-it-cost-)
-    *   [Prerequisites](#prerequisites)
-    *   [Configuration](#configuration)
-    *   [Installation](#installation)
-    *   [Usage](#usage)
-    *   [MCID-Per-Item Feature](#mcid-per-item-feature)
-    *   [Optimizations](#optimizations)
-    *   [Testing](#testing)
-    +   [Unit Tests](#unit-tests)
-    +   [End-To-End Tests](#end-to-end-tests)
-    *   [Syncing your deployment with future Feedloader releases](#syncing-your-deployment-with-future-feedloader-releases)
-    *   [Dev Ops Maintenance Guide](#dev-ops-maintenance-guide)
+- [FeedLoader](#feedloader)
+  - [Introduction](#introduction)
+    - [What does it do?](#what-does-it-do)
+    - [Who is it for?](#who-is-it-for)
+    - [What does it cost?](#what-does-it-cost)
+  - [Setup Guide](#setup-guide)
+    - [Prerequisites](#prerequisites)
+    - [Configuration](#configuration)
+    - [Installation](#installation)
+  - [Usage](#usage)
+  - [MCID-Per-Item Feature](#mcid-per-item-feature)
+  - [Optimizations](#optimizations)
+  - [Testing](#testing)
+    - [Unit Tests](#unit-tests)
+    - [End-To-End Tests](#end-to-end-tests)
+  - [Syncing your deployment with future Feedloader releases](#syncing-your-deployment-with-future-feedloader-releases)
+  - [Dev Ops Maintenance Guide](#dev-ops-maintenance-guide)
 
 ## Introduction
 
@@ -75,7 +75,17 @@ for most use cases of Feedloader.
 -   PubSub (https://cloud.google.com/pubsub/pricing)
 -   Cloud Logging (https://cloud.google.com/stackdriver/pricing)
 
-## Prerequisites
+## Setup Guide
+
+This section will explain how to setup Feedloader for use in a GCP environment.
+
+**DISCLAIMER: This guide assumes that your GCP environment is at default
+settings and is not customized in any way. Any pre-existing GCP settings
+modifications, configurations, or customizations may affect the installation and
+operation of this solution. For the best experience, use a new/unused
+GCP project when proceeding with the below guide.**
+
+### Prerequisites
 
 -   [Install the Google Cloud SDK](https://cloud.google.com/sdk/) to be able to
     run CLI commands. Ensure both alpha and beta are installed, and update
@@ -101,7 +111,7 @@ for most use cases of Feedloader.
 
 -   Clone the code from this repository.
 
-## Configuration
+### Configuration
 
 -   Move to the root directory of the project and open the file
     `feed_schema_config.json`. Customize the mapping by naming the `csvHeader`
@@ -131,7 +141,7 @@ for most use cases of Feedloader.
         [naming conventions](https://cloud.google.com/storage/docs/naming) for
         Google Cloud Storage buckets or they will not be created properly.
 
-## Installation
+### Installation
 
 -   Run the initialization script in the root directory:
 
