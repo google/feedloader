@@ -59,40 +59,51 @@ class BatchCreatorTest(unittest.TestCase):
 
     self.assertEqual(expected_value, result)
 
-  @parameterized.expand([('custom_label_0', '', 'customLabel0', ''),
-                         ('custom_label_0', None, 'customLabel0', ''),
-                         ('shipping', '', 'shipping', []),
-                         ('shipping', '123', 'shipping', []),
-                         ('size', 'S', 'sizes', ['S']),
-                         ('size', 'S,M,L', 'sizes', ['S', 'M', 'L']),
-                         ('size', 'S M L', 'sizes', ['S M L']),
-                         ('item_id', 'asdf', 'offerId', 'asdf'),
-                         ('price', '100', 'price', {
-                             'currency': constants.TARGET_CURRENCY,
-                             'value': '100'
-                         }),
-                         ('price', '100JPY', 'price', {
-                             'currency': constants.TARGET_CURRENCY,
-                             'value': '100'
-                         }),
-                         ('price', '100 JPY', 'price', {
-                             'currency': constants.TARGET_CURRENCY,
-                             'value': '100'
-                         }),
-                         ('sale_price', '100', 'salePrice', {
-                             'currency': constants.TARGET_CURRENCY,
-                             'value': '100'
-                         }),
-                         ('sale_price', '100 JPY', 'salePrice', {
-                             'currency': constants.TARGET_CURRENCY,
-                             'value': '100'
-                         }), ('loyalty_points', '100', 'loyaltyPoints', {}),
-                         ('loyalty_points', '', 'loyaltyPoints', {}),
-                         ('product_type', 'clothing,shoes', 'productTypes',
-                          ['clothing', 'shoes']),
-                         ('product_type', '', 'productTypes', []),
-                         ('adwords_redirect', 'https://google.com',
-                          'adsRedirect', 'https://google.com')])
+  @parameterized.expand([
+      ('custom_label_0', '', 'customLabel0', ''),
+      ('custom_label_0', None, 'customLabel0', ''),
+      ('shipping', '', 'shipping', []),
+      ('shipping', '123', 'shipping', []),
+      ('size', 'S', 'sizes', ['S']),
+      ('size', 'S,M,L', 'sizes', ['S', 'M', 'L']),
+      ('size', 'S M L', 'sizes', ['S M L']),
+      ('item_id', 'asdf', 'offerId', 'asdf'),
+      ('price', '100', 'price', {
+          'currency': constants.TARGET_CURRENCY,
+          'value': '100'
+      }),
+      ('price', '100JPY', 'price', {
+          'currency': constants.TARGET_CURRENCY,
+          'value': '100'
+      }),
+      ('price', '100 JPY', 'price', {
+          'currency': constants.TARGET_CURRENCY,
+          'value': '100'
+      }),
+      ('sale_price', '100', 'salePrice', {
+          'currency': constants.TARGET_CURRENCY,
+          'value': '100'
+      }),
+      ('sale_price', '100 JPY', 'salePrice', {
+          'currency': constants.TARGET_CURRENCY,
+          'value': '100'
+      }),
+      ('loyalty_points', '100', 'loyaltyPoints', {}),
+      ('loyalty_points', '', 'loyaltyPoints', {}),
+      ('product_type', 'clothing,shoes', 'productTypes', ['clothing', 'shoes']),
+      ('product_type', '', 'productTypes', []),
+      ('product_type', None, 'productTypes', []),
+      ('adwords_redirect', 'https://google.com', 'adsRedirect',
+       'https://google.com'),
+      ('included_destination', 'Local_inventory_ads', 'includedDestinations',
+       ['Local_inventory_ads']),
+      ('included_destinations', 'Local_inventory_ads,Free_local_listings',
+       'includedDestinations', ['Local_inventory_ads', 'Free_local_listings']),
+      ('excluded_destination', 'Local_inventory_ads,Free_local_listings',
+       'excludedDestinations', ['Local_inventory_ads', 'Free_local_listings']),
+      ('excluded_destinations', 'Local_inventory_ads,Free_local_listings',
+       'excludedDestinations', ['Local_inventory_ads', 'Free_local_listings']),
+  ])
   def test_convert_feed_field_to_api_field(self, key, value, new_key_expected,
                                            new_value_expected):
     new_key, new_value = batch_creator._convert_feed_field_to_api_field(

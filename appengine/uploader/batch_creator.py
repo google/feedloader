@@ -127,9 +127,19 @@ def _convert_feed_field_to_api_field(original_key: str,
     that field as expected in API format (new_value).
   """
   modified_key = _snake_to_camel_case(original_key)
-  if modified_key in ('size', 'additionalImageLink', 'productType'):
+  if modified_key in ('size', 'additionalImageLink', 'productType',
+                      'includedDestination', 'excludedDestination'):
     modified_key = modified_key + 's'
-    modified_value = original_value.split(',') if original_value else []
+
+  if modified_key in ('sizes', 'additionalImageLinks', 'productTypes',
+                      'includedDestinations', 'excludedDestinations'):
+    # Parse an attribute with repeated values.
+    if original_value:
+      modified_value = [
+          element.strip() for element in original_value.split(',')
+      ]
+    else:
+      modified_value = []
   elif modified_key == 'itemId':
     modified_key = 'offerId'
     modified_value = original_value
@@ -145,8 +155,6 @@ def _convert_feed_field_to_api_field(original_key: str,
   elif modified_key == 'adwordsRedirect':
     modified_key = 'adsRedirect'
     modified_value = original_value
-  elif modified_key == 'productTypes':
-    modified_value = original_value.split(',') if original_value else []
   else:
     modified_value = original_value if original_value is not None else ''
   return modified_key, modified_value
