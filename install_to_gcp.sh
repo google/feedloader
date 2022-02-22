@@ -54,6 +54,30 @@ print_green() {
   echo -e "${GREEN}$1${NOCOLOR}"
 }
 
+# Validate that environment variables are within expected thresholds
+if (($EXPIRATION_THRESHOLD < 1 || $EXPIRATION_THRESHOLD > 30)); then
+  print_green "EXPIRATION_THRESHOLD has an invalid value. Please set this variable to a number between 1 and 30 and try running this script again."
+  exit 1
+fi
+
+TIMEZONE_REGEX="(\+|\-)[0-9]{2}\:[0-9]{2}"
+if ! [[ $TIMEZONE_UTC_OFFSET =~ $TIMEZONE_REGEX ]]; then
+  print_green "TIMEZONE_UTC_OFFSET was not formatted properly. Please specify the value in +/-DD:DD format and try running this script again."
+  exit 1
+fi
+
+IS_MCA=$(echo "$IS_MCA" | awk '{print toupper(substr($0,0,1))tolower(substr($0,2))}')
+if ! [[ "${IS_MCA}" -eq "True" || "${IS_MCA}" -eq "False" ]]; then
+  print_green "IS_MCA must be set to a value of True or False. Please set this variable and try running this script again."
+  exit 1
+fi
+
+SHOPTIMIZER_INTEGRATION_ON=$(echo "$SHOPTIMIZER_INTEGRATION_ON" | awk '{print toupper(substr($0,0,1))tolower(substr($0,2))}')
+if ! [[ "${SHOPTIMIZER_API_INTEGRATION_ON}" -eq "True" || "${SHOPTIMIZER_API_INTEGRATION_ON}" -eq "False" ]]; then
+  print_green "SHOPTIMIZER_API_INTEGRATION_ON must be set to a value of True or False. Please set this variable and try running this script again."
+  exit 1
+fi
+
 # Authorize with a Google Account.
 gcloud auth login
 
@@ -61,7 +85,7 @@ gcloud auth login
 print_green "Initialize BigQuery if BigQuery has never been run before. Otherwise, you can skip this step."
 bq init
 
-print_green "Initialization started."
+print_green "Feedload Installation started..."
 
 # Set default project.
 gcloud config set project "$GCP_PROJECT"
