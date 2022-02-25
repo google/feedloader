@@ -387,13 +387,39 @@ else
     --env-variables PROJECT_ID="$GCP_PROJECT",LOCATION="$REGION",PUBSUB_TOPIC="$PUBSUB_TOPIC_MAILER"
 fi
 
-gcloud composer environments update "$CLOUD_COMPOSER_ENV_NAME" \
+COMPOSER_UPDATE_RESULT=$(gcloud composer environments update "$CLOUD_COMPOSER_ENV_NAME" \
   --location "$REGION" \
-  --update-pypi-packages-from-file composer/completion_monitor/requirements.txt
+  --update-pypi-packages-from-file composer/completion_monitor/requirements.txt \
+  2>&1)
+if [[ "$COMPOSER_UPDATE_RESULT" == "ERROR:"* ]];
+then
+  if [[ "$COMPOSER_UPDATE_RESULT" == *"No change in configuration"* ]];
+  then
+    echo "INFO: Did not update Composer environment because there is no change in configuration"
+  else
+    echo "$COMPOSER_UPDATE_RESULT"
+    exit 1
+  fi
+else
+  echo "$COMPOSER_UPDATE_RESULT"
+fi
 
-gcloud composer environments update "$CLOUD_COMPOSER_ENV_NAME" \
+COMPOSER_UPDATE_RESULT=$(gcloud composer environments update "$CLOUD_COMPOSER_ENV_NAME" \
   --location "$REGION" \
-  --update-airflow-configs=api-auth_backend=airflow.api.auth.backend.default
+  --update-airflow-configs=api-auth_backend=airflow.api.auth.backend.default \
+  2>&1)
+if [[ "$COMPOSER_UPDATE_RESULT" == "ERROR:"* ]];
+then
+  if [[ "$COMPOSER_UPDATE_RESULT" == *"No change in configuration"* ]];
+  then
+    echo "INFO: Did not update Composer environment because there is no change in configuration"
+  else
+    echo "$COMPOSER_UPDATE_RESULT"
+    exit 1
+  fi
+else
+  echo "$COMPOSER_UPDATE_RESULT"
+fi
 
 sed -e "s/<DAG_ID>/$DAG_ID/g" \
   -e "s/<GCP_PROJECT_ID>/$GCP_PROJECT/g" \
