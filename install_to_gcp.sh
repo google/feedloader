@@ -375,17 +375,18 @@ print_green "Setting up Cloud Composer. This could take a while..."
 gcloud components install kubectl
 if gcloud beta composer environments list --locations="$REGION" | grep -w "$CLOUD_COMPOSER_ENV_NAME" &> /dev/null
 then
-  echo "Cloud Composer Environment $CLOUD_COMPOSER_ENV_NAME already exists"
-else
-  gcloud composer environments create "$CLOUD_COMPOSER_ENV_NAME" \
-    --image-version="$CLOUD_COMPOSER_IMAGE_VERSION" \
-    --airflow-configs=core-default_timezone=Asia/Tokyo \
-    --location "$REGION" \
-    --zone "$CLOUD_COMPOSER_ZONE" \
-    --python-version 3 \
-    --machine-type n1-standard-1 \
-    --env-variables PROJECT_ID="$GCP_PROJECT",LOCATION="$REGION",PUBSUB_TOPIC="$PUBSUB_TOPIC_MAILER"
+  gcloud composer environments delete "$CLOUD_COMPOSER_ENV_NAME" --quiet \
+    --location "$REGION"
 fi
+
+gcloud composer environments create "$CLOUD_COMPOSER_ENV_NAME" \
+  --image-version="$CLOUD_COMPOSER_IMAGE_VERSION" \
+  --airflow-configs=core-default_timezone=Asia/Tokyo \
+  --location "$REGION" \
+  --zone "$CLOUD_COMPOSER_ZONE" \
+  --python-version 3 \
+  --machine-type n1-standard-1 \
+  --env-variables PROJECT_ID="$GCP_PROJECT",LOCATION="$REGION",PUBSUB_TOPIC="$PUBSUB_TOPIC_MAILER"
 
 COMPOSER_UPDATE_RESULT=$(gcloud composer environments update "$CLOUD_COMPOSER_ENV_NAME" \
   --location "$REGION" \
