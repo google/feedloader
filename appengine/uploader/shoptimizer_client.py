@@ -17,6 +17,7 @@
 
 import json
 import logging
+import os
 from typing import Any, Dict
 
 import requests
@@ -56,11 +57,13 @@ class ShoptimizerClient(object):
       The optimized batch of product data if no errors encountered,
       or the original batch of product data otherwise.
     """
-    if not self._is_input_valid(batch):
+    shoptimizer_base_url = os.environ.get('SHOPTIMIZER_URL', '')
+
+    if not self._is_input_valid(batch, shoptimizer_base_url):
       return batch
 
     try:
-      response_dict = self._send_to_shoptimizer(batch)
+      response_dict = self._send_to_shoptimizer(batch, shoptimizer_base_url)
     except (TypeError, requests.exceptions.RequestException, ValueError):
       return batch
 
@@ -78,16 +81,18 @@ class ShoptimizerClient(object):
 
     return response_dict.get('optimized-data', batch)
 
-  def _is_input_valid(self, batch: constants.Batch) -> bool:
+  def _is_input_valid(self, batch: constants.Batch,
+                      shoptimizer_base_url: str) -> bool:
     """Checks input parameters are valid.
 
     Args:
       batch: The batch of product data to be optimized.
+      shoptimizer_base_url: The base url of the Shoptimizer deployment.
 
     Returns:
       True if the input is valid, False otherwise.
     """
-    if not constants.SHOPTIMIZER_BASE_URL:
+    if not shoptimizer_base_url:
       logging.warning(
           _ERROR_MSG_TEMPLATE, self._batch_number, self._operation.value,
           'Shoptimizer API URL is not set. '
@@ -116,11 +121,13 @@ class ShoptimizerClient(object):
 
     return True
 
-  def _send_to_shoptimizer(self, batch) -> Dict[str, Any]:
+  def _send_to_shoptimizer(self, batch,
+                           shoptimizer_base_url: str) -> Dict[str, Any]:
     """Logs errors returned by individual Shoptimizer API optimizers.
 
     Args:
       batch: The batch of product data to be optimized.
+      shoptimizer_base_url: The base url of the Shoptimizer deployment.
 
     Returns:
       A dictionary containing the results of the Shoptimizer API call.
@@ -135,8 +142,12 @@ class ShoptimizerClient(object):
       raise
 
     try:
-      jwt = self._get_jwt()
-    except requests.exceptions.RequestException:
+      jwt = self._get_jwt(shoptimizer_base_url)
+    except requests.exceptions.RequestException as request_exception:
+      logging.exception(_ERROR_MSG_TEMPLATE, self._batch_number,
+                        self._operation.value,
+                        'Failed to get JWT. Shoptimizer API not called',
+                        request_exception)
       raise
 
     try:
@@ -149,7 +160,7 @@ class ShoptimizerClient(object):
       request_params.update(self._config_params)
       response = requests.request(
           'POST',
-          constants.SHOPTIMIZER_ENDPOINT,
+          f'{shoptimizer_base_url}/shoptimizer/v1/batch/optimize',
           data=batch_as_json,
           headers=headers,
           params=request_params)
@@ -170,14 +181,17 @@ class ShoptimizerClient(object):
 
     return response_dict
 
-  def _get_jwt(self) -> str:
+  def _get_jwt(self, shoptimizer_base_url: str) -> str:
     """Retrieves a JSON web token from the Google metadata server for Cloud Run authentication.
+
+    Args:
+      shoptimizer_base_url: The base url of the Shoptimizer deployment.
 
     Returns:
         A JSON web token that can be used for Cloud Run authentication.
     """
     try:
-      token_request_url = _METADATA_SERVER_TOKEN_URL + constants.SHOPTIMIZER_BASE_URL
+      token_request_url = _METADATA_SERVER_TOKEN_URL + shoptimizer_base_url
       token_request_headers = {'Metadata-Flavor': 'Google'}
 
       # Fetches the token

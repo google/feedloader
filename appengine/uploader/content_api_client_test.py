@@ -50,7 +50,6 @@ class ContentApiClientTest(unittest.TestCase):
     super(ContentApiClientTest, self).setUp()
     self._api_service = mock.Mock()
     self._client = content_api_client.ContentApiClient(self._api_service)
-    constants.MERCHANT_ID = test_utils.DUMMY_MERCHANT_ID
 
   @parameterized.expand([
       (constants.Method.INSERT, test_utils.SINGLE_ITEM_COUNT),

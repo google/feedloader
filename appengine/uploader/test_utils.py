@@ -24,6 +24,7 @@ import constants
 
 BATCH_NUMBER = 1
 DUMMY_MERCHANT_ID = '1234567'
+DUMMY_CHANNEL = 'online'
 MULTIPLE_ITEM_COUNT = 2
 SINGLE_ITEM_COUNT = 1
 
@@ -271,7 +272,7 @@ def generate_item_dict_api_pair(
       'identifierExists': item['identifier_exists'],
       'contentLanguage': constants.CONTENT_LANGUAGE,
       'targetCountry': constants.TARGET_COUNTRY,
-      'channel': constants.CHANNEL
+      'channel': DUMMY_CHANNEL
   }
   empty_fields = [k for k in api_formatted_item if not api_formatted_item[k]]
   for empty_field in empty_fields:

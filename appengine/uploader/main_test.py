@@ -17,6 +17,7 @@
 
 import http
 import json
+import os
 import socket
 import unittest
 import unittest.mock as mock
@@ -30,14 +31,20 @@ import main
 from models import failure
 from models import process_result
 
+DUMMY_CHANNEL = 'online'
+DUMMY_IS_MCA = 'False'
+DUMMY_MERCHANT_ID = '12345'
+DUMMY_SHOPTIMIZER_API_INTEGRATION_ON = 'False'
 DUMMY_ROWS = [bigquery.Row(['0001'], {'item_id': 0})]
 DUMMY_START_INDEX = 0
 DUMMY_BATCH_SIZE = 1000
 DUMMY_TIMESTAMP = '0001-01-01:00:00:00'
+DUMMY_CHANNEL = 'local'
 DUMMY_REQUEST_BODY = json.dumps({
     'start_index': DUMMY_START_INDEX,
     'batch_size': DUMMY_BATCH_SIZE,
     'timestamp': DUMMY_TIMESTAMP,
+    'channel': DUMMY_CHANNEL,
 })
 DUMMY_SUCCESSES = ['0001', '0002', '0003']
 DUMMY_FAILURES = [failure.Failure('0004', 'Error message')]
@@ -47,6 +54,12 @@ DELETE_URL = '/delete_items'
 PREVENT_EXPIRING_URL = '/prevent_expiring_items'
 
 
+@mock.patch.dict(
+    os.environ, {
+        'IS_MCA': DUMMY_IS_MCA,
+        'MERCHANT_ID': DUMMY_MERCHANT_ID,
+        'SHOPTIMIZER_API_INTEGRATION_ON': DUMMY_SHOPTIMIZER_API_INTEGRATION_ON,
+    })
 class MainTest(unittest.TestCase):
 
   def setUp(self):
@@ -66,7 +79,8 @@ class MainTest(unittest.TestCase):
     self.mock_bq_client.from_service_account_json.return_value.load_items.return_value = DUMMY_ROWS
     self.mock_content_api_client.return_value.process_items.return_value = (
         DUMMY_SUCCESSES, DUMMY_FAILURES)
-
+    mock_cloud_logging = mock.patch('main.cloud_logging')
+    mock_cloud_logging.start()
     self.addCleanup(mock.patch.stopall)
 
   @parameterized.expand(((INSERT_URL,), (DELETE_URL,)))
@@ -83,6 +97,7 @@ class MainTest(unittest.TestCase):
         'start_index': DUMMY_START_INDEX,
         'batch_size': 0,
         'timestamp': DUMMY_TIMESTAMP,
+        'channel': DUMMY_CHANNEL,
     })
 
     response = self.test_client.post(
@@ -135,7 +150,7 @@ class MainTest(unittest.TestCase):
         headers={'X-AppEngine-TaskExecutionCount': '0'})
 
     self.mock_content_api_client.return_value.process_items.assert_any_call(
-        mock.ANY, mock.ANY, mock.ANY, constants.Method.INSERT)
+        mock.ANY, mock.ANY, mock.ANY, constants.Method.INSERT, DUMMY_CHANNEL)
 
   def test_run_process_should_call_content_api_with_insert_when_operation_is_prevent_expiring(
       self):
@@ -145,7 +160,7 @@ class MainTest(unittest.TestCase):
         headers={'X-AppEngine-TaskExecutionCount': '0'})
 
     self.mock_content_api_client.return_value.process_items.assert_any_call(
-        mock.ANY, mock.ANY, mock.ANY, constants.Method.INSERT)
+        mock.ANY, mock.ANY, mock.ANY, constants.Method.INSERT, DUMMY_CHANNEL)
 
   def test_run_process_should_call_content_api_with_delete_when_operation_is_delete(
       self):
@@ -155,7 +170,7 @@ class MainTest(unittest.TestCase):
         headers={'X-AppEngine-TaskExecutionCount': '0'})
 
     self.mock_content_api_client.return_value.process_items.assert_any_call(
-        mock.ANY, mock.ANY, mock.ANY, constants.Method.DELETE)
+        mock.ANY, mock.ANY, mock.ANY, constants.Method.DELETE, DUMMY_CHANNEL)
 
   @parameterized.expand(
       (('BAD REQUEST', http.HTTPStatus.BAD_REQUEST),
@@ -164,8 +179,8 @@ class MainTest(unittest.TestCase):
       self, reason, status):
     with mock.patch('content_api_client.suggest_retry') as suggest_retry:
       suggest_retry.return_value = True
-      self.mock_content_api_client.return_value.process_items.side_effect = errors.HttpError(
-          mock.MagicMock(status=status, reason=reason), b'')
+      self.mock_content_api_client.return_value.process_items.side_effect = (
+          errors.HttpError(mock.MagicMock(status=status, reason=reason), b''))
 
       response = self.test_client.post(
           INSERT_URL,
@@ -179,10 +194,11 @@ class MainTest(unittest.TestCase):
       self):
     with mock.patch('content_api_client.suggest_retry') as suggest_retry:
       suggest_retry.return_value = False
-      self.mock_content_api_client.return_value.process_items.side_effect = errors.HttpError(
-          mock.MagicMock(
-              status=http.HTTPStatus.PAYMENT_REQUIRED,
-              reason='Payment Required'), b'')
+      self.mock_content_api_client.return_value.process_items.side_effect = (
+          errors.HttpError(
+              mock.MagicMock(
+                  status=http.HTTPStatus.PAYMENT_REQUIRED,
+                  reason='Payment Required'), b''))
 
       response = self.test_client.post(
           INSERT_URL,
@@ -193,8 +209,8 @@ class MainTest(unittest.TestCase):
 
   def test_run_process_should_return_timeout_error_when_content_api_call_returns_socket_timeout_error(
       self):
-    self.mock_content_api_client.return_value.process_items.side_effect = socket.timeout(
-    )
+    self.mock_content_api_client.return_value.process_items.side_effect = (
+        socket.timeout())
 
     response = self.test_client.post(
         INSERT_URL,
@@ -209,7 +225,8 @@ class MainTest(unittest.TestCase):
         mock.MagicMock(
             status=http.HTTPStatus.INTERNAL_SERVER_ERROR,
             reason='Server got itself in trouble'), b'')
-    self.mock_content_api_client.return_value.process_items.side_effect = http_error
+    self.mock_content_api_client.return_value.process_items.side_effect = (
+        http_error)
 
     with self.assertLogs(level='ERROR') as log:
       self.test_client.post(
@@ -218,7 +235,8 @@ class MainTest(unittest.TestCase):
           headers={'X-AppEngine-TaskExecutionCount': f'{max_retry_count}'})
 
       self.assertIn(
-          f'ERROR:root:Batch #1 with operation upsert and initiation timestamp {DUMMY_TIMESTAMP} '
+          'ERROR:root:Batch #1 with operation upsert, initiation timestamp '
+          f'{DUMMY_TIMESTAMP}, and channel {DUMMY_CHANNEL} '
           f'failed and will not be retried. '
           f'Error: {http_error}', log.output)
 
@@ -234,13 +252,15 @@ class MainTest(unittest.TestCase):
         mock.MagicMock(
             status=http.HTTPStatus.INTERNAL_SERVER_ERROR,
             reason='Server got itself in trouble'), b'')
-    self.mock_content_api_client.return_value.process_items.side_effect = http_error
+    self.mock_content_api_client.return_value.process_items.side_effect = (
+        http_error)
 
     with self.assertLogs(level='ERROR') as log:
       self.test_client.post(INSERT_URL, data=DUMMY_REQUEST_BODY)
 
       self.assertIn(
-          f'ERROR:root:Batch #1 with operation upsert and initiation timestamp {DUMMY_TIMESTAMP} '
+          'ERROR:root:Batch #1 with operation upsert, initiation timestamp '
+          f'{DUMMY_TIMESTAMP}, and channel {DUMMY_CHANNEL} '
           f'failed and will not be retried. '
           f'Error: {http_error}', log.output)
 
@@ -267,7 +287,8 @@ class MainTest(unittest.TestCase):
     dummy_http_error = errors.HttpError(
         mock.MagicMock(
             status=http.HTTPStatus.BAD_REQUEST, reason='Bad Request'), b'')
-    self.mock_content_api_client.return_value.process_items.side_effect = dummy_http_error
+    self.mock_content_api_client.return_value.process_items.side_effect = (
+        dummy_http_error)
     dummy_failures = [
         failure.Failure(
             str(item.get('item_id', 'Missing ID')),
@@ -289,6 +310,9 @@ class MainTest(unittest.TestCase):
         expected_batch_id,
     )
 
+  @mock.patch.dict(os.environ, {
+      'SHOPTIMIZER_API_INTEGRATION_ON': 'True',
+  })
   def test_run_process_should_call_shoptimizer_when_operation_is_insert(self):
     self.test_client.post(
         INSERT_URL,
@@ -297,6 +321,9 @@ class MainTest(unittest.TestCase):
 
     self.mock_shoptimizer_client.return_value.shoptimize.assert_called_once()
 
+  @mock.patch.dict(os.environ, {
+      'SHOPTIMIZER_API_INTEGRATION_ON': 'True',
+  })
   def test_run_process_should_call_shoptimizer_when_operation_is_prevent_expiring(
       self):
     self.test_client.post(

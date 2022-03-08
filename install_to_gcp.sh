@@ -66,6 +66,12 @@ if ! [[ $TIMEZONE_UTC_OFFSET =~ $TIMEZONE_REGEX ]]; then
   exit 1
 fi
 
+USE_LOCAL_INVENTORY_ADS=$(echo "$USE_LOCAL_INVENTORY_ADS" | awk '{print toupper(substr($0,0,1))tolower(substr($0,2))}')
+if ! [[ "${USE_LOCAL_INVENTORY_ADS}" -eq "True" || "${USE_LOCAL_INVENTORY_ADS}" -eq "False" ]]; then
+  print_green "USE_LOCAL_INVENTORY_ADS must be set to a value of True or False. Please set this variable and try running this script again."
+  exit 1
+fi
+
 IS_MCA=$(echo "$IS_MCA" | awk '{print toupper(substr($0,0,1))tolower(substr($0,2))}')
 if ! [[ "${IS_MCA}" -eq "True" || "${IS_MCA}" -eq "False" ]]; then
   print_green "IS_MCA must be set to a value of True or False. Please set this variable and try running this script again."
@@ -81,11 +87,7 @@ fi
 # Authorize with a Google Account.
 gcloud auth login
 
-# This is required to initialize BigQuery credentials and avoid hanging prompt
-print_green "Initialize BigQuery if BigQuery has never been run before. Otherwise, you can skip this step."
-bq init
-
-print_green "Feedload Installation started..."
+print_green "Feedloader Installation started..."
 
 # Set default project.
 gcloud config set project "$GCP_PROJECT"
@@ -921,8 +923,8 @@ do
   do
     NOTIFICATION_RESULT="$(gcloud alpha monitoring channels create --display-name="$EMAIL" --type=email --channel-labels="email_address=$EMAIL" --description="Shopping Alert Notification Channel" 2>&1)"
     sleep 2
-    CHANNEL=$(echo "$NOTIFICATION_RESULT" | sed "s/.*\[\(.*\)\].*/\1/")
-    gcloud alpha monitoring policies update "$POLICY_ID" --add-notification-channels="$CHANNEL"
+    NOTIFICATION_CHANNEL=$(echo "$NOTIFICATION_RESULT" | sed "s/.*\[\(.*\)\].*/\1/")
+    gcloud alpha monitoring policies update "$POLICY_ID" --add-notification-channels="$NOTIFICATION_CHANNEL"
     sleep 2
   done
   print_green "Alerting policy with notification channel created for $POLICY"
@@ -1039,7 +1041,7 @@ CreateTrigger deploy_monitor.yaml \
   _KEYRING="$KEYRING"::_KEYNAME="$KEYNAME"::_MAILER_SUBSCRIPTION="$MAILER_SUBSCRIPTION"::_GCP_PROJECT="$GCP_PROJECT"::_PUBSUB_TOKEN="$PUBSUB_TOKEN"::_CLOUD_COMPOSER_ENV_NAME="$CLOUD_COMPOSER_ENV_NAME"::_REGION="$REGION"::_UPDATE_BUCKET="$UPDATE_BUCKET"
 CreateTrigger deploy_gae.yaml \
   "FeedLoader Deploy AppEngine Services" \
-  _KEYRING="$KEYRING"::_KEYNAME="$KEYNAME"::_GCP_PROJECT="$GCP_PROJECT"::_REGION="$REGION"::_TRIGGER_COMPLETION_BUCKET="$TRIGGER_COMPLETION_BUCKET"::_LOCK_BUCKET="$LOCK_BUCKET"::_CLOUD_BUILD_SUBSCRIPTION="$CLOUD_BUILD_SUBSCRIPTION"::_BUILD_NOTIFICATION_EMAILS="$BUILD_NOTIFICATION_EMAILS"::_MERCHANT_ID="$MERCHANT_ID"::_IS_MCA="$IS_MCA"::_SHOPTIMIZER_URL="$SHOPTIMIZER_URL"::_SHOPTIMIZER_API_INTEGRATION_ON="$SHOPTIMIZER_API_INTEGRATION_ON"::_PUBSUB_TOKEN="$PUBSUB_TOKEN"::_FINISH_EMAILS="$FINISH_EMAILS"
+  _KEYRING="$KEYRING"::_KEYNAME="$KEYNAME"::_GCP_PROJECT="$GCP_PROJECT"::_REGION="$REGION"::_TRIGGER_COMPLETION_BUCKET="$TRIGGER_COMPLETION_BUCKET"::_LOCK_BUCKET="$LOCK_BUCKET"::_CLOUD_BUILD_SUBSCRIPTION="$CLOUD_BUILD_SUBSCRIPTION"::_BUILD_NOTIFICATION_EMAILS="$BUILD_NOTIFICATION_EMAILS"::_MERCHANT_ID="$MERCHANT_ID"::_IS_MCA="$IS_MCA"::_USE_LOCAL_INVENTORY_ADS="$USE_LOCAL_INVENTORY_ADS"::_SHOPTIMIZER_URL="$SHOPTIMIZER_URL"::_SHOPTIMIZER_API_INTEGRATION_ON="$SHOPTIMIZER_API_INTEGRATION_ON"::_PUBSUB_TOKEN="$PUBSUB_TOKEN"::_FINISH_EMAILS="$FINISH_EMAILS"
 
 # Encrypt Keys
 print_green "Generating encrypted versions of the service accounts so that Cloud Build can deploy stuff securely..."

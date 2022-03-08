@@ -17,6 +17,7 @@
 
 import collections
 import http
+import os
 from typing import Any, Mapping, Union
 import unittest
 import unittest.mock as mock
@@ -30,6 +31,14 @@ _START_PATH = '/start'
 _DUMMY_DELETE_COUNT = 1
 _DUMMY_EXPIRING_COUNT = 2
 _DUMMY_UPSERT_COUNT = 3
+
+_TEST_PROJECT_ID = 'test-project-id'
+_TEST_REGION = 'test-region'
+_TEST_TRIGGER_COMPLETION_BUCKET = 'test-trigger-completion-bucket'
+_TEST_LOCK_BUCKET = 'test-lock-bucket'
+
+_TEST_CHANNEL_LOCAL = 'local'
+_TEST_CHANNEL_ONLINE = 'online'
 
 
 def _build_request_body_for_start(
@@ -52,6 +61,14 @@ def _build_request_body_for_start(
   return request_body
 
 
+@mock.patch.dict(
+    os.environ, {
+        'PROJECT_ID': _TEST_PROJECT_ID,
+        'REGION': _TEST_REGION,
+        'USE_LOCAL_INVENTORY_ADS': 'True',
+        'TRIGGER_COMPLETION_BUCKET': _TEST_TRIGGER_COMPLETION_BUCKET,
+        'LOCK_BUCKET': _TEST_LOCK_BUCKET,
+    })
 class MainTest(unittest.TestCase):
 
   def setUp(self):
@@ -66,6 +83,8 @@ class MainTest(unittest.TestCase):
         'storage_client.StorageClient.from_service_account_json').start()
     self.pubsub_client = mock.patch(
         'pubsub_client.PubSubClient.from_service_account_json').start()
+    mock_cloud_logging = mock.patch('main.cloud_logging')
+    mock_cloud_logging.start()
     self.addCleanup(mock.patch.stopall)
 
   def test_ok_returned_when_request_body_valid(self):
@@ -98,7 +117,8 @@ class MainTest(unittest.TestCase):
     self.bigquery_client.return_value.delete_table.assert_called_once()
     self.assertEqual(http.HTTPStatus.BAD_REQUEST, response.status_code)
 
-  def test_eof_deleted_and_bad_request_returned_when_upsert_count_invalid(self):
+  def test_eof_deleted_and_bad_request_returned_when_upsert_count_invalid(
+      self):
     request_body = _build_request_body_for_start(
         delete_count=_DUMMY_DELETE_COUNT,
         expiring_count=_DUMMY_EXPIRING_COUNT,
@@ -111,7 +131,7 @@ class MainTest(unittest.TestCase):
     request_body = _build_request_body_for_start(
         delete_count=0, expiring_count=0, upsert_count=_DUMMY_UPSERT_COUNT)
     upsert_query = bigquery_client.generate_query_string(
-        main._QUERY_FILEPATH_FOR_UPSERT, main._PROJECT_ID)
+        main._QUERY_FILEPATH_FOR_UPSERT, _TEST_PROJECT_ID)
     self.test_app_client.post(_START_PATH, json=request_body)
     self.bigquery_client.return_value.initialize_dataset_and_table.assert_any_call(
         upsert_query)
@@ -121,7 +141,7 @@ class MainTest(unittest.TestCase):
         delete_count=_DUMMY_DELETE_COUNT, expiring_count=0, upsert_count=0)
     self.test_app_client.post(_START_PATH, json=request_body)
     upsert_query = bigquery_client.generate_query_string(
-        main._QUERY_FILEPATH_FOR_UPSERT, main._PROJECT_ID)
+        main._QUERY_FILEPATH_FOR_UPSERT, _TEST_PROJECT_ID)
     self.assert_not_called_with(
         self.bigquery_client.return_value.initialize_dataset_and_table,
         upsert_query)
@@ -130,7 +150,7 @@ class MainTest(unittest.TestCase):
     request_body = _build_request_body_for_start(
         delete_count=_DUMMY_DELETE_COUNT, expiring_count=0, upsert_count=0)
     delete_query = bigquery_client.generate_query_string(
-        main._QUERY_FILEPATH_FOR_DELETE, main._PROJECT_ID)
+        main._QUERY_FILEPATH_FOR_DELETE, _TEST_PROJECT_ID)
     self.test_app_client.post(_START_PATH, json=request_body)
     self.bigquery_client.return_value.initialize_dataset_and_table.assert_any_call(
         delete_query)
@@ -140,16 +160,17 @@ class MainTest(unittest.TestCase):
         delete_count=0, expiring_count=0, upsert_count=_DUMMY_UPSERT_COUNT)
     self.test_app_client.post(_START_PATH, json=request_body)
     delete_query = bigquery_client.generate_query_string(
-        main._QUERY_FILEPATH_FOR_DELETE, main._PROJECT_ID)
+        main._QUERY_FILEPATH_FOR_DELETE, _TEST_PROJECT_ID)
     self.assert_not_called_with(
         self.bigquery_client.return_value.initialize_dataset_and_table,
         delete_query)
 
-  def test_prevent_expiring_table_created_when_expiring_count_is_positive(self):
+  def test_prevent_expiring_table_created_when_expiring_count_is_positive(
+      self):
     request_body = _build_request_body_for_start(
         delete_count=0, expiring_count=_DUMMY_EXPIRING_COUNT, upsert_count=0)
     prevent_expiring_query = bigquery_client.generate_query_string(
-        main._QUERY_FILEPATH_FOR_PREVENT_EXPIRING, main._PROJECT_ID)
+        main._QUERY_FILEPATH_FOR_PREVENT_EXPIRING, _TEST_PROJECT_ID)
     self.test_app_client.post(_START_PATH, json=request_body)
     self.bigquery_client.return_value.initialize_dataset_and_table.assert_any_call(
         prevent_expiring_query)
@@ -160,7 +181,7 @@ class MainTest(unittest.TestCase):
         delete_count=0, expiring_count=0, upsert_count=0)
     self.test_app_client.post(_START_PATH, json=request_body)
     prevent_expiring_query = bigquery_client.generate_query_string(
-        main._QUERY_FILEPATH_FOR_PREVENT_EXPIRING, main._PROJECT_ID)
+        main._QUERY_FILEPATH_FOR_PREVENT_EXPIRING, _TEST_PROJECT_ID)
     self.assert_not_called_with(
         self.bigquery_client.return_value.initialize_dataset_and_table,
         prevent_expiring_query)
@@ -190,7 +211,8 @@ class MainTest(unittest.TestCase):
     self.tasks_client.return_value.push_tasks.assert_any_call(
         total_items=_DUMMY_UPSERT_COUNT,
         batch_size=mock.ANY,
-        timestamp=mock.ANY)
+        timestamp=mock.ANY,
+        channel=mock.ANY)
 
   def test_tasks_created_when_delete_count_positive(self):
     request_body = _build_request_body_for_start(
@@ -199,7 +221,8 @@ class MainTest(unittest.TestCase):
     self.tasks_client.return_value.push_tasks.assert_any_call(
         total_items=_DUMMY_DELETE_COUNT,
         batch_size=mock.ANY,
-        timestamp=mock.ANY)
+        timestamp=mock.ANY,
+        channel=mock.ANY)
 
   def test_tasks_created_when_expiring_count_positive(self):
     request_body = _build_request_body_for_start(
@@ -208,7 +231,30 @@ class MainTest(unittest.TestCase):
     self.tasks_client.return_value.push_tasks.assert_any_call(
         total_items=_DUMMY_EXPIRING_COUNT,
         batch_size=mock.ANY,
-        timestamp=mock.ANY)
+        timestamp=mock.ANY,
+        channel=_TEST_CHANNEL_ONLINE)
+    self.tasks_client.return_value.push_tasks.assert_any_call(
+        total_items=_DUMMY_EXPIRING_COUNT,
+        batch_size=mock.ANY,
+        timestamp=mock.ANY,
+        channel=_TEST_CHANNEL_LOCAL)
+    self.assertEqual(self.tasks_client.return_value.push_tasks.call_count, 2)
+
+  def test_two_tasks_created_when_local_inventory_is_used(self):
+    request_body = _build_request_body_for_start(
+        delete_count=0, expiring_count=0, upsert_count=_DUMMY_UPSERT_COUNT)
+    self.test_app_client.post(_START_PATH, json=request_body)
+    self.tasks_client.return_value.push_tasks.assert_any_call(
+        total_items=_DUMMY_UPSERT_COUNT,
+        batch_size=mock.ANY,
+        timestamp=mock.ANY,
+        channel=_TEST_CHANNEL_LOCAL)
+    self.tasks_client.return_value.push_tasks.assert_any_call(
+        total_items=_DUMMY_UPSERT_COUNT,
+        batch_size=mock.ANY,
+        timestamp=mock.ANY,
+        channel=_TEST_CHANNEL_ONLINE)
+    self.assertEqual(self.tasks_client.return_value.push_tasks.call_count, 2)
 
   def test_eof_not_uploaded_when_no_content_api_call_required(self):
     request_body = _build_request_body_for_start(
@@ -292,7 +338,7 @@ class MainTest(unittest.TestCase):
         expiring_count=_DUMMY_EXPIRING_COUNT,
         upsert_count=_DUMMY_UPSERT_COUNT)
     response = self.test_app_client.post(_START_PATH, json=request_body)
-    self.storage_client.return_value.delete_eof.assert_called_once()
+    self.storage_client.return_value.delete_eof_lock.assert_called_once()
     self.assertEqual(http.HTTPStatus.INTERNAL_SERVER_ERROR,
                      response.status_code)
 

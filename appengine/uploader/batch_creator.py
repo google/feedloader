@@ -15,8 +15,10 @@
 
 """Creates a batch of product data to send to Content API for Shopping."""
 
+from distutils import util
 import logging
 import numbers
+import os
 import string
 from typing import Any, List, Tuple, Union
 
@@ -29,7 +31,8 @@ _PRODUCT_ID_FORMAT = '{channel}:{contentLanguage}:{targetCountry}:{offerId}'
 
 
 def create_batch(
-    batch_number: int, item_rows: List[bigquery.Row], method: constants.Method
+    batch_number: int, item_rows: List[bigquery.Row], method: constants.Method,
+    channel: str
 ) -> Tuple[constants.Batch, List[str], constants.BatchIdToItemId]:
   """Processes a list of items into a batch ready to submit to the API.
 
@@ -40,6 +43,7 @@ def create_batch(
     batch_number: The id used to track this batch for logging purposes
     item_rows: List of rows from BigQuery items table.
     method: The operation to carry out on these items (Add Delete etc)
+    channel: The ads destination channel. One of 'local' or 'online'.
 
   Returns:
     A tuple representing the batch object (dict), a list of skipped items and a
@@ -49,8 +53,13 @@ def create_batch(
   skipped_item_ids = []
   batch_id_to_item_id = {}
 
+  try:
+    is_mca = util.strtobool(os.environ['IS_MCA'])
+  except ValueError:
+    is_mca = False
+
   for batch_id, item_row in enumerate(item_rows):
-    if constants.IS_MCA:
+    if is_mca:
       if item_row['google_merchant_id']:
         merchant_id = item_row['google_merchant_id']
       else:
@@ -61,7 +70,7 @@ def create_batch(
         skipped_item_ids.append(item_id)
         continue
     else:
-      merchant_id = constants.MERCHANT_ID
+      merchant_id = os.environ['MERCHANT_ID']
 
     entry = {
         'batchId': batch_id,
@@ -70,7 +79,8 @@ def create_batch(
     }
     # Content API responses only return batch id, not item id.
     # So we have to store a map of batch ids to items ids.
-    formatted_item = _convert_item_to_content_api_format(batch_number, item_row)
+    formatted_item = _convert_item_to_content_api_format(
+        batch_number, item_row, channel)
     if method == constants.Method.INSERT:
       entry['product'] = formatted_item
     elif method == constants.Method.DELETE:
@@ -82,14 +92,16 @@ def create_batch(
   return batch, skipped_item_ids, batch_id_to_item_id
 
 
-def _convert_item_to_content_api_format(
-    batch_number: int, item_row: Union[bigquery.Row,
-                                       constants.Product]) -> constants.Product:
+def _convert_item_to_content_api_format(batch_number: int,
+                                        item_row: Union[bigquery.Row,
+                                                        constants.Product],
+                                        channel: str) -> constants.Product:
   """Converts item to the format required by the API.
 
   Args:
     batch_number: The id used to track this batch for logging purposes
     item_row: Dictionary representation of the input item
+    channel: The ads destination channel. One of 'local' or 'online'.
 
   Returns:
     An item (dict) that has all fields (keys and values) mapped from the input
@@ -109,7 +121,7 @@ def _convert_item_to_content_api_format(
                     item_row['item_id'], str(e))
   api_formatted_item['contentLanguage'] = constants.CONTENT_LANGUAGE
   api_formatted_item['targetCountry'] = constants.TARGET_COUNTRY
-  api_formatted_item['channel'] = constants.CHANNEL
+  api_formatted_item['channel'] = channel
 
   return api_formatted_item
 

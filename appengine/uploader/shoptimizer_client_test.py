@@ -18,12 +18,14 @@
 import unittest
 import unittest.mock as mock
 
+import os
 import requests
 
 import constants
 import shoptimizer_client
 import test_utils
 
+DUMMY_SHOPTIMIZER_URL = 'httpshoptimizerdotcom'
 BATCH_NUMBER = 0
 METHOD = constants.Method.INSERT
 OPERATION = constants.Operation.UPSERT
@@ -109,6 +111,9 @@ class MockResponse:
     pass
 
 
+@mock.patch.dict(os.environ, {
+    'SHOPTIMIZER_URL': DUMMY_SHOPTIMIZER_URL,
+})
 @mock.patch('shoptimizer_client.requests')
 class ShoptimizerClientTest(unittest.TestCase):
 
@@ -155,16 +160,17 @@ class ShoptimizerClientTest(unittest.TestCase):
       self.assertEqual(original_batch, returned_batch)
       mocked_requests.assert_not_called()
 
+  @mock.patch.dict(os.environ, {
+      'SHOPTIMIZER_URL': '',
+  })
   def test_empty_shoptimizer_url_does_not_call_api_and_returns_original_batch(
       self, mocked_requests):
     _, original_batch, _, _ = test_utils.generate_test_data(METHOD)
 
-    with mock.patch('shoptimizer_client.constants') as mocked_constants:
-      mocked_constants.SHOPTIMIZER_BASE_URL = ''
-      returned_batch = self.client.shoptimize(original_batch)
+    returned_batch = self.client.shoptimize(original_batch)
 
-      self.assertEqual(original_batch, returned_batch)
-      mocked_requests.assert_not_called()
+    self.assertEqual(original_batch, returned_batch)
+    mocked_requests.assert_not_called()
 
   def test_empty_batch_does_not_call_api_and_returns_original_batch(
       self, mocked_requests):
@@ -305,7 +311,7 @@ class ShoptimizerClientTest(unittest.TestCase):
         self.client.shoptimize(original_batch)
 
         self.assertIn(
-            f'ERROR:root:Request for batch #0 with operation upsert encountered '
+            'ERROR:root:Request for batch #0 with operation upsert encountered '
             'an error when running optimizer mpn-optimizer. Error: An unexpected error occurred',
             log.output)
 
@@ -339,7 +345,7 @@ class ShoptimizerClientTest(unittest.TestCase):
         self.client.shoptimize(original_batch)
 
         self.assertIn(
-            f'ERROR:root:Request for batch #0 with operation upsert encountered '
+            'ERROR:root:Request for batch #0 with operation upsert encountered '
             'an error when running optimizer my-plugin. Error: An unexpected error occurred',
             log.output)
 

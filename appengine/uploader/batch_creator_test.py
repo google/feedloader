@@ -15,14 +15,17 @@
 
 """Unit tests for Batch Creator."""
 
+import os
 import unittest
-
+import unittest.mock as mock
 from parameterized import parameterized
 
 import batch_creator
 import constants
 import test_utils
 
+DUMMY_CHANNEL = 'online'
+DUMMY_MERCHANT_ID = '1234567'
 ITEM_WITH_DESCRIPTION_EMPTY = {'description': ''}
 ITEM_WITH_CONDITION_USED = {'condition': 'used'}
 ITEM_WITH_MULTIPLE_COLORS = {'color': 'Red/Blue/Green'}
@@ -37,11 +40,11 @@ ITEM_WITH_PRODUCT_TYPES = {'product_types': 'clothing'}
 ITEM_WITH_ADS_REDIRECT = {'ads_redirect': 'https://google.com'}
 
 
+@mock.patch.dict(os.environ, {
+    'MERCHANT_ID': DUMMY_MERCHANT_ID,
+    'IS_MCA': 'False',
+})
 class BatchCreatorTest(unittest.TestCase):
-
-  def setUp(self):
-    super(BatchCreatorTest, self).setUp()
-    constants.MERCHANT_ID = test_utils.DUMMY_MERCHANT_ID
 
   @parameterized.expand([
       ('', ''),
@@ -142,7 +145,7 @@ class BatchCreatorTest(unittest.TestCase):
         **fields)
 
     api_formatted_item = batch_creator._convert_item_to_content_api_format(
-        batch_id, item)
+        batch_id, item, DUMMY_CHANNEL)
 
     self.assertEqual(expected_api_formatted_item, api_formatted_item)
 
@@ -155,46 +158,82 @@ class BatchCreatorTest(unittest.TestCase):
     item = {original_field_name: original_field_value}
 
     api_formatted_item = batch_creator._convert_item_to_content_api_format(
-        batch_id, item)
+        batch_id, item, DUMMY_CHANNEL)
 
     self.assertNotIn(formatted_field_name, api_formatted_item)
 
   @parameterized.expand([
-      (True, test_utils.SINGLE_ITEM_COUNT),
-      (True, test_utils.MULTIPLE_ITEM_COUNT),
-      (False, test_utils.SINGLE_ITEM_COUNT),
-      (False, test_utils.MULTIPLE_ITEM_COUNT),
+      [test_utils.SINGLE_ITEM_COUNT],
+      [test_utils.MULTIPLE_ITEM_COUNT],
   ])
-  def test_create_insert_batch(self, is_mca, num_rows):
-    constants.IS_MCA = is_mca
+  @mock.patch.dict(os.environ, {
+      'IS_MCA': 'True',
+      'MERCHANT_ID': DUMMY_MERCHANT_ID
+  })
+  def test_create_insert_batch_for_mca(self, num_rows):
     method = constants.Method.INSERT
     batch_id = test_utils.BATCH_NUMBER
     item_rows, expected_batch, _, _ = test_utils.generate_test_data(
         method, num_rows)
 
-    actual_batch, _, _ = batch_creator.create_batch(batch_id, item_rows, method)
+    actual_batch, _, _ = batch_creator.create_batch(batch_id, item_rows, method,
+                                                    DUMMY_CHANNEL)
 
     self.assertEqual(expected_batch, actual_batch)
 
   @parameterized.expand([
-      (True, test_utils.SINGLE_ITEM_COUNT),
-      (True, test_utils.MULTIPLE_ITEM_COUNT),
-      (False, test_utils.SINGLE_ITEM_COUNT),
-      (False, test_utils.MULTIPLE_ITEM_COUNT),
+      [test_utils.SINGLE_ITEM_COUNT],
+      [test_utils.MULTIPLE_ITEM_COUNT],
   ])
-  def test_create_delete_batch(self, is_mca, num_rows):
-    constants.IS_MCA = is_mca
+  @mock.patch.dict(os.environ, {'IS_MCA': 'False'})
+  def test_create_insert_batch_not_mca(self, num_rows):
+    method = constants.Method.INSERT
+    batch_id = test_utils.BATCH_NUMBER
+    item_rows, expected_batch, _, _ = test_utils.generate_test_data(
+        method, num_rows)
+
+    actual_batch, _, _ = batch_creator.create_batch(batch_id, item_rows, method,
+                                                    DUMMY_CHANNEL)
+
+    self.assertEqual(expected_batch, actual_batch)
+
+  @parameterized.expand([
+      [test_utils.SINGLE_ITEM_COUNT],
+      [test_utils.MULTIPLE_ITEM_COUNT],
+  ])
+  @mock.patch.dict(os.environ, {'IS_MCA': 'True'})
+  def test_create_delete_batch_for_mca(self, num_rows):
     method = constants.Method.DELETE
     batch_id = test_utils.BATCH_NUMBER
     item_rows, expected_batch, _, _ = test_utils.generate_test_data(
         method, num_rows)
 
-    actual_batch, _, _ = batch_creator.create_batch(batch_id, item_rows, method)
+    actual_batch, _, _ = batch_creator.create_batch(batch_id, item_rows, method,
+                                                    DUMMY_CHANNEL)
 
     self.assertEqual(expected_batch, actual_batch)
 
+  @parameterized.expand([
+      [test_utils.SINGLE_ITEM_COUNT],
+      [test_utils.MULTIPLE_ITEM_COUNT],
+  ])
+  @mock.patch.dict(os.environ, {'IS_MCA': 'False'})
+  def test_create_delete_batch_not_mca(self, num_rows):
+    method = constants.Method.DELETE
+    batch_id = test_utils.BATCH_NUMBER
+    item_rows, expected_batch, _, _ = test_utils.generate_test_data(
+        method, num_rows)
+
+    actual_batch, _, _ = batch_creator.create_batch(batch_id, item_rows, method,
+                                                    DUMMY_CHANNEL)
+
+    self.assertEqual(expected_batch, actual_batch)
+
+  @mock.patch.dict(os.environ, {
+      'MERCHANT_ID': '',
+      'IS_MCA': 'True',
+  })
   def test_create_batch_returns_skipped_items_when_merchant_id_missing(self):
-    constants.IS_MCA = True
     method = constants.Method.INSERT
     batch_number = test_utils.BATCH_NUMBER
     remove_merchant_ids = True
@@ -202,21 +241,21 @@ class BatchCreatorTest(unittest.TestCase):
         method, test_utils.MULTIPLE_ITEM_COUNT, remove_merchant_ids)
 
     _, skipped_item_ids, _ = batch_creator.create_batch(batch_number, item_rows,
-                                                        method)
+                                                        method, DUMMY_CHANNEL)
 
     self.assertEqual(test_utils.MULTIPLE_ITEM_COUNT, len(skipped_item_ids))
     self.assertEqual('test id', skipped_item_ids[0])
     self.assertEqual('test id', skipped_item_ids[1])
 
+  @mock.patch.dict(os.environ, {'MERCHANT_ID': DUMMY_MERCHANT_ID})
   def test_create_batch_returns_batch_to_item_id_dict(self):
-    constants.IS_MCA = True
     method = constants.Method.INSERT
     batch_id = test_utils.BATCH_NUMBER
     item_rows, _, _, _ = test_utils.generate_test_data(
         method, test_utils.MULTIPLE_ITEM_COUNT)
 
     _, _, batch_to_item_id_dict = batch_creator.create_batch(
-        batch_id, item_rows, method)
+        batch_id, item_rows, method, DUMMY_CHANNEL)
 
     self.assertEqual(test_utils.MULTIPLE_ITEM_COUNT, len(batch_to_item_id_dict))
     self.assertEqual('test id', batch_to_item_id_dict.get(0))

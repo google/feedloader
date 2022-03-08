@@ -38,5 +38,6 @@ class TasksClientTest(unittest.TestCase):
     total_items = 2000
     batch_size = 1000
     timestamp = '20180101203010'
-    self.ct_client.push_tasks(total_items, batch_size, timestamp)
+    channel = 'online'
+    self.ct_client.push_tasks(total_items, batch_size, timestamp, channel)
     self.assertEqual(2, self.mock_client.create_task.call_count)

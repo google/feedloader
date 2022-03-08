@@ -22,6 +22,7 @@ from models import upload_task
 DUMMY_START_INDEX = 1
 DUMMY_BATCH_SIZE = 2
 DUMMY_TIMESTAMP = '00010101000000'
+DUMMY_CHANNEL = 'local'
 
 
 class UploadTaskTest(unittest.TestCase):
@@ -30,9 +31,11 @@ class UploadTaskTest(unittest.TestCase):
     dummy_json_data = {
         'start_index': DUMMY_START_INDEX,
         'batch_size': DUMMY_BATCH_SIZE,
-        'timestamp': DUMMY_TIMESTAMP
+        'timestamp': DUMMY_TIMESTAMP,
+        'channel': DUMMY_CHANNEL,
     }
     task = upload_task.UploadTask.from_json(dummy_json_data)
     self.assertEqual(DUMMY_START_INDEX, task.start_index)
     self.assertEqual(DUMMY_BATCH_SIZE, task.batch_size)
     self.assertEqual(DUMMY_TIMESTAMP, task.timestamp)
+    self.assertEqual(DUMMY_CHANNEL, task.channel)

@@ -21,6 +21,7 @@ sends them to Task Queue.
 """
 
 import datetime
+from distutils import util
 import http
 import json
 import logging
@@ -41,12 +42,12 @@ import storage_client
 import tasks_client
 
 _SERVICE_ACCOUNT = './config/service_account.json'
-_PROJECT_ID = os.environ['PROJECT_ID']
-_LOCATION = os.environ['REGION']
 _QUEUE_NAME = 'processing-items'
 _BATCH_SIZE = 1000
-_TRIGGER_COMPLETION_BUCKET = os.environ['TRIGGER_COMPLETION_BUCKET']
-_LOCK_BUCKET = os.environ['LOCK_BUCKET']
+
+_CHANNEL_LOCAL = 'local'
+_CHANNEL_ONLINE = 'online'
+
 _DATASET_ID_PROCESSING_FEED_DATA = 'processing_feed_data'
 _DATASET_ID_FEED_DATA = 'feed_data'
 _TABLE_ID_ITEMS = 'items'
@@ -71,9 +72,6 @@ _TARGET_URL_INSERT = '/insert_items'
 _TARGET_URL_DELETE = '/delete_items'
 _TARGET_URL_PREVENT_EXPIRING = '/prevent_expiring_items'
 
-logging_client = cloud_logging.Client()
-logging_client.setup_logging(log_level=logging.DEBUG)
-
 app = flask.Flask(__name__)
 
 
@@ -97,6 +95,9 @@ def start() -> Tuple[str, http.HTTPStatus]:
   Returns:
     message and HTTP status code.
   """
+  logging_client = cloud_logging.Client()
+  logging_client.setup_logging(log_level=logging.DEBUG)
+
   try:
     request_body = json.loads(flask.request.data)
   except TypeError:
@@ -136,6 +137,10 @@ def start() -> Tuple[str, http.HTTPStatus]:
       _create_tasks_in_cloud_tasks(_TARGET_URL_PREVENT_EXPIRING,
                                    task.expiring_count, timestamp)
       any_task_started = True
+  except TypeError:
+    logging.exception('An invalid numeric value was provided.')
+    _cleanup()
+    return f'An invalid numeric value was provided. Upsert count: {task.upsert_count}. Delete count: {task.delete_count}. Expiring count: {task.expiring_count}', http.HTTPStatus.BAD_REQUEST
   except cloud_exceptions.GoogleCloudError as gcp_error:
     logging.exception('GCP error raised.')
     _cleanup()
@@ -165,8 +170,9 @@ def _create_processing_table(table_suffix: str, query_filepath: str,
     query_filepath: filepath to a query file.
     timestamp: timestamp to identify the run.
   """
+  project_id = _load_environment_variable('PROJECT_ID')
   try:
-    query = bigquery_client.generate_query_string(query_filepath, _PROJECT_ID)
+    query = bigquery_client.generate_query_string(query_filepath, project_id)
   except IOError as io_error:
     logging.exception(io_error.message)
   else:
@@ -185,20 +191,47 @@ def _create_tasks_in_cloud_tasks(target_url: str, items_count: int,
     items_count: number of items to be processed.
     timestamp: timestamp to identify the run.
   """
-  ct_client = tasks_client.TasksClient.from_service_account_json(
+  project_id = _load_environment_variable('PROJECT_ID')
+  location = _load_environment_variable('REGION')
+  use_local_inventory_ads = (
+      _load_environment_variable('USE_LOCAL_INVENTORY_ADS'))
+  cloudtasks_client = tasks_client.TasksClient.from_service_account_json(
       _SERVICE_ACCOUNT,
       url=target_url,
-      project_id=_PROJECT_ID,
-      location=_LOCATION,
+      project_id=project_id,
+      location=location,
       queue_name=_QUEUE_NAME)
-  ct_client.push_tasks(
-      total_items=items_count, batch_size=_BATCH_SIZE, timestamp=timestamp)
+
+  try:
+    use_lia = bool(util.strtobool(use_local_inventory_ads))
+  except ValueError:
+    use_lia = False
+
+  if use_lia:
+    cloudtasks_client.push_tasks(
+        total_items=items_count,
+        batch_size=_BATCH_SIZE,
+        timestamp=timestamp,
+        channel=_CHANNEL_LOCAL)
+    cloudtasks_client.push_tasks(
+        total_items=items_count,
+        batch_size=_BATCH_SIZE,
+        timestamp=timestamp,
+        channel=_CHANNEL_ONLINE)
+  else:
+    cloudtasks_client.push_tasks(
+        total_items=items_count,
+        batch_size=_BATCH_SIZE,
+        timestamp=timestamp,
+        channel=_CHANNEL_ONLINE)
 
 
 def _trigger_monitoring_cloud_composer() -> None:
   """Triggers the monitoring application."""
+  trigger_completion_bucket = (
+      _load_environment_variable('TRIGGER_COMPLETION_BUCKET'))
   gcs_client = storage_client.StorageClient.from_service_account_json(
-      _SERVICE_ACCOUNT, _TRIGGER_COMPLETION_BUCKET)
+      _SERVICE_ACCOUNT, trigger_completion_bucket)
   gcs_client.upload_eof()
 
 
@@ -217,21 +250,28 @@ def _delete_items_table() -> None:
 
 def _delete_eof_lock() -> None:
   """Deletes EOF.lock file to allow the next run."""
+  lock_bucket = _load_environment_variable('LOCK_BUCKET')
   gcs_client = storage_client.StorageClient.from_service_account_json(
-      _SERVICE_ACCOUNT, _LOCK_BUCKET)
+      _SERVICE_ACCOUNT, lock_bucket)
   gcs_client.delete_eof_lock()
 
 
 def _trigger_mailer_for_nothing_processed() -> None:
   """Sends a completion email showing 0 upsert/deletion/expiring calls (sent when no diff)."""
+  project_id = _load_environment_variable('PROJECT_ID')
   pubsub_publisher = pubsub_client.PubSubClient.from_service_account_json(
       _SERVICE_ACCOUNT)
   operation_counts_dict = {
       operation: operation_counts.OperationCounts(operation, 0, 0, 0)
       for operation in OPERATIONS
   }
-  pubsub_publisher.trigger_result_email(_PROJECT_ID, _MAILER_TOPIC_NAME,
+  pubsub_publisher.trigger_result_email(project_id, _MAILER_TOPIC_NAME,
                                         operation_counts_dict)
+
+
+def _load_environment_variable(key: str) -> str:
+  """Helper that loads an environment variable with the matching key."""
+  return os.environ.get(key, '')
 
 
 if __name__ == '__main__':

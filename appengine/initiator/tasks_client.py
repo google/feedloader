@@ -63,20 +63,21 @@ class TasksClient(object):
         location=location,
         queue_name=queue_name)
 
-  def push_tasks(self, total_items, batch_size, timestamp):
+  def push_tasks(self, total_items, batch_size, timestamp, channel):
     """Create right number of tasks with the batch size.
 
     Args:
       total_items: Amount of total items to update.
       batch_size: Number of items processed in a task.
       timestamp: String of a time stamp passing to Task Queue.
+      channel: The ads destination channel. One of 'local' or 'online'.
     """
     start_index = 0
     while start_index < total_items:
-      self._push_task(start_index, batch_size, timestamp)
+      self._push_task(start_index, batch_size, timestamp, channel)
       start_index += batch_size
 
-  def _push_task(self, start_index, batch_size, timestamp):
+  def _push_task(self, start_index, batch_size, timestamp, channel):
     """Push a task to Task Queue with the first item's index in the batch.
 
     Args:
@@ -84,11 +85,13 @@ class TasksClient(object):
         data from BigQuery.
       batch_size: Number of items processed in a task.
       timestamp: String of a time stamp passing to Task Queue.
+      channel: The ads destination channel. One of 'local' or 'online'.
     """
     payload = json.dumps({
         'start_index': start_index,
         'batch_size': batch_size,
-        'timestamp': timestamp
+        'timestamp': timestamp,
+        'channel': channel
     }).encode()
     task = {
         'app_engine_http_request': {

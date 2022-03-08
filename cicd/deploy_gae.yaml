@@ -42,7 +42,7 @@ steps:
   - --key=${_KEYNAME}
 - name: 'gcr.io/cloud-builders/gcloud'
   entrypoint: '/bin/bash'
-  args: ['-c', 'bash appengine/initiator/app.sh prod ${_GCP_PROJECT} ${_REGION} ${_TRIGGER_COMPLETION_BUCKET} ${_UPDATE_BUCKET} ${_LOCK_BUCKET}']
+  args: ['-c', 'bash appengine/initiator/app.sh prod ${_GCP_PROJECT} ${_REGION} ${_USE_LOCAL_INVENTORY_ADS} ${_TRIGGER_COMPLETION_BUCKET} ${_UPDATE_BUCKET} ${_LOCK_BUCKET}']
   id: deploy_default
 - name: gcr.io/cloud-builders/gcloud
   entrypoint: /bin/sh

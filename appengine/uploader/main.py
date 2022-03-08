@@ -19,9 +19,11 @@ This module receives batch jobs from TaskQueue. For each job, the module loads
 data from BigQuery and sends it to Merchant Center.
 """
 
+from distutils import util
 import http
 import json
 import logging
+import os
 import socket
 from typing import List, Tuple
 
@@ -41,9 +43,6 @@ from models import process_result
 from models import upload_task
 
 app = flask.Flask(__name__)
-
-_logging_client = cloud_logging.Client()
-_logging_client.setup_logging(log_level=logging.DEBUG)
 
 _SHOPTIMIZER_CONFIG_FILE_PATH = 'config/shoptimizer_config.json'
 
@@ -93,6 +92,8 @@ def _run_process(operation: constants.Operation) -> Tuple[str, http.HTTPStatus]:
   Returns:
     The result of HTTP request.
   """
+  logging_client = cloud_logging.Client()
+  logging_client.setup_logging(log_level=logging.DEBUG)
   request_body = json.loads(flask.request.data.decode('utf-8'))
   task = upload_task.UploadTask.from_json(request_body)
 
@@ -114,19 +115,26 @@ def _run_process(operation: constants.Operation) -> Tuple[str, http.HTTPStatus]:
   try:
     if not items:
       logging.error(
-          'Batch #%d, operation %s: 0 items loaded from BigQuery so batch not sent to Content API. Start_index: %d, batch_size: %d,'
-          'initiation timestamp: %s', batch_number, operation.value,
-          task.start_index, task.batch_size, task.timestamp)
+          'Batch #%d, operation %s: 0 items loaded from BigQuery so batch not '
+          'sent to Content API. Start_index: %d, batch_size: %d, initiation '
+          'timestamp: %s, channel: %s', batch_number, operation.value,
+          task.start_index, task.batch_size, task.timestamp, task.channel)
       return 'No items to process', http.HTTPStatus.OK
 
     method = OPERATION_TO_METHOD.get(operation)
 
     # Creates batch from items loaded from BigQuery
     original_batch, skipped_item_ids, batch_id_to_item_id = batch_creator.create_batch(
-        batch_number, items, method)
+        batch_number, items, method, task.channel)
 
     # Optimizes batch via Shoptimizer for upsert/prevent_expiring operations
-    if operation != constants.Operation.DELETE and constants.SHOPTIMIZER_API_INTEGRATION_ON:
+    try:
+      shoptimizer_integration_on = (
+          util.strtobool(os.environ['SHOPTIMIZER_API_INTEGRATION_ON']))
+    except ValueError:
+      shoptimizer_integration_on = False
+
+    if operation != constants.Operation.DELETE and shoptimizer_integration_on:
       batch_to_send_to_content_api = _create_optimized_batch(
           original_batch, batch_number, operation)
     else:
@@ -135,7 +143,8 @@ def _run_process(operation: constants.Operation) -> Tuple[str, http.HTTPStatus]:
     # Sends batch of items to Content API for Shopping
     api_client = content_api_client.ContentApiClient()
     successful_item_ids, item_failures = api_client.process_items(
-        batch_to_send_to_content_api, batch_number, batch_id_to_item_id, method)
+        batch_to_send_to_content_api, batch_number, batch_id_to_item_id, method,
+        task.channel)
 
     result = process_result.ProcessResult(
         successfully_processed_item_ids=successful_item_ids,
@@ -157,9 +166,10 @@ def _run_process(operation: constants.Operation) -> Tuple[str, http.HTTPStatus]:
     return error_reason, error_status_code
   else:
     logging.info(
-        'Batch #%d with operation %s and initiation timestamp %s successfully processed %s items, failed to process %s items and skipped %s items.',
-        batch_number, operation.value, task.timestamp,
-        result.get_success_count(), result.get_failure_count(),
+        'Batch #%d with operation %s, initiation timestamp %s, and channel %s '
+        'successfully processed %s items, failed to process %s items and '
+        'skipped %s items.', batch_number, operation.value, task.timestamp,
+        task.channel, result.get_success_count(), result.get_failure_count(),
         result.get_skipped_count())
   finally:
     recorder = result_recorder.ResultRecorder.from_service_account_json(
@@ -240,9 +250,9 @@ def _handle_content_api_error(
     process_result.
   """
   logging.warning(
-      'Batch #%d with operation %s and initiation timestamp %s failed. HTTP status: %s. Error: %s',
-      batch_num, operation.value, task.timestamp, error_status_code,
-      error_reason)
+      'Batch #%d with operation %s, initiation timestamp %s, and channel %s '
+      'failed. HTTP status: %s. Error: %s', batch_num, operation.value,
+      task.timestamp, task.channel, error_status_code, error_reason)
   # If the batch API call received an HttpError, mark every id as failed.
   item_failures = [
       failure.Failure(str(item_row.get('item_id', 'Missing ID')), error_reason)
@@ -253,12 +263,14 @@ def _handle_content_api_error(
   if content_api_client.suggest_retry(
       error_status_code) and _get_execution_attempt() < TASK_RETRY_LIMIT:
     logging.warning(
-        'Batch #%d with operation %s and initiation timestamp %s will be requeued for retry',
-        batch_num, operation.value, task.timestamp)
+        'Batch #%d with operation %s, initiation timestamp %s, and channel %s '
+        'will be requeued for retry', batch_num, operation.value,
+        task.timestamp, task.channel)
   else:
     logging.error(
-        'Batch #%d with operation %s and initiation timestamp %s failed and will not be retried. Error: %s',
-        batch_num, operation.value, task.timestamp, error)
+        'Batch #%d with operation %s, initiation timestamp %s, and channel %s '
+        'failed and will not be retried. Error: %s', batch_num, operation.value,
+        task.timestamp, task.channel, error)
 
   return api_result
 

@@ -38,14 +38,14 @@ class TasksClientTest(unittest.TestCase):
   def setUp(self):
     super(TasksClientTest, self).setUp()
     self.mock_client = unittest.mock.Mock()
-    self.ct_client = tasks_client.TasksClient(self.mock_client)
+    self.tasks_client = tasks_client.TasksClient(self.mock_client)
 
   def test_is_queue_empty_when_empty(self):
     self.mock_client.list_tasks.return_value = []
     self.assertTrue(
-        self.ct_client.is_queue_empty(PROJECT_ID, LOCATION, QUEUE_NAME))
+        self.tasks_client.is_queue_empty(PROJECT_ID, LOCATION, QUEUE_NAME))
 
   def test_is_queue_empty_when_not_empty(self):
     self.mock_client.list_tasks.return_value = [types.Task()]
     self.assertFalse(
-        self.ct_client.is_queue_empty(PROJECT_ID, LOCATION, QUEUE_NAME))
+        self.tasks_client.is_queue_empty(PROJECT_ID, LOCATION, QUEUE_NAME))

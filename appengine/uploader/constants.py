@@ -15,13 +15,8 @@
 
 """Constants used within the project."""
 
-from distutils import util
 import enum
 from typing import Any, Dict
-import os
-
-# Constants to identify the project.
-PROJECT_ID = os.environ['PROJECT_ID']
 
 # Constants for configuration.
 CONFIG_DIRECTORY = './config'
@@ -37,23 +32,14 @@ SERVICE_NAME = 'content'
 CONTENT_API_VERSION = 'v2.1'
 SANDBOX_SERVICE_VERSION = 'v2sandbox'
 CONTENT_API_SCOPE = 'https://www.googleapis.com/auth/' + SERVICE_NAME
-CHANNEL = 'online'
 CONTENT_LANGUAGE = 'ja'
 TARGET_COUNTRY = 'JP'
 TARGET_CURRENCY = 'JPY'
-IS_MCA = util.strtobool(os.environ['IS_MCA'])
-MERCHANT_ID = os.environ['MERCHANT_ID']
 
 DATASET_ID_FOR_PROCESSING = 'processing_feed_data'
 DATASET_ID_FOR_MONITORING = 'monitor_data'
 TABLE_ID_FOR_RESULT_COUNTS_MONITORING = 'process_result'
 TABLE_ID_FOR_ITEM_RESULTS_MONITORING = 'item_results'
-
-# Constants for Shoptimizer API
-SHOPTIMIZER_API_INTEGRATION_ON = util.strtobool(
-    os.environ['SHOPTIMIZER_API_INTEGRATION_ON'])
-SHOPTIMIZER_BASE_URL = os.environ.get('SHOPTIMIZER_URL', '')
-SHOPTIMIZER_ENDPOINT = f'{SHOPTIMIZER_BASE_URL}/shoptimizer/v1/batch/optimize'
 
 # Type aliases
 Batch = Dict[str, Any]

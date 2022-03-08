@@ -26,6 +26,7 @@ class UploadTask(object):
   start_index: int
   batch_size: int
   timestamp: str
+  channel: str
 
   @classmethod
   def from_json(cls, json_data: Mapping[str, Any]) -> 'UploadTask':
@@ -40,5 +41,9 @@ class UploadTask(object):
     start_index: int = json_data.get('start_index', 0)
     batch_size: int = json_data.get('batch_size', 0)
     timestamp: str = json_data.get('timestamp', '0')
+    channel: str = json_data.get('channel', 'online')
     return cls(
-        start_index=start_index, batch_size=batch_size, timestamp=timestamp)
+        start_index=start_index,
+        batch_size=batch_size,
+        timestamp=timestamp,
+        channel=channel)

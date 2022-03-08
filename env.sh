@@ -25,6 +25,7 @@ FEED_BUCKET=[FEED BUCKET] # e.g. gs://feed
 FINISH_EMAILS=[Comma-separated Email Addresses to receive completion emails] # e.g. First Last <person1@domain.com>, First Last <person2@domain.com>
 GCP_PROJECT=[PROJECT ID]
 IS_MCA=[Whether or not the Merchant Id below is an MCA. Must be either True or False] # e.g. True
+USE_LOCAL_INVENTORY_ADS=False [Whether or not to include the "local" destination for Local Inventory Ads]
 LOCK_BUCKET=[Name of the bucket to store the calculateProductChanges EOF lock file] # e.g. gs://lock
 MERCHANT_ID=[ID of the Merchant Center Account ID to upload items to, or the MCA parent Id if an MCA.]
 MONITOR_BUCKET=[MONITOR BUCKET] # e.g. gs://monitor

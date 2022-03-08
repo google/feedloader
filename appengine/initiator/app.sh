@@ -20,12 +20,14 @@ if [[ $# = 0 ]] || [[ $1 = 'dev' ]]; then
 elif [[ $1 = 'test' ]]; then
   python -m test_runner
 elif [[ $1 = 'prod' ]]; then
-  if [[ "$#" -le 3 ]]; then
-    echo "Project ID, region, completion trigger bucket are required when deploying to prod."
+  if [[ "$#" -le 4 ]]; then
+    echo "Project ID, region, channel, and completion trigger bucket are required when deploying to prod."
   else
-    sed -e "s/<PROJECT_ID>/$2/g" -e "s/<REGION>/$3/g" \
-      -e "s%<TRIGGER_COMPLETION_BUCKET>%$4%g" \
-      -e "s%<LOCK_BUCKET>%$5%g" \
+    sed -e "s/<PROJECT_ID>/$2/g" \
+      -e "s/<REGION>/$3/g" \
+      -e "s/<USE_LOCAL_INVENTORY_ADS>/$4/g" \
+      -e "s%<TRIGGER_COMPLETION_BUCKET>%$5%g" \
+      -e "s%<LOCK_BUCKET>%$6%g" \
       "$CURRENT_DIRECTORY"/app_template.yaml > "$CURRENT_DIRECTORY"/app.yaml
     gcloud beta app deploy "$CURRENT_DIRECTORY"/app.yaml \
       "$CURRENT_DIRECTORY"/queue.yaml --project "$2" --quiet \
