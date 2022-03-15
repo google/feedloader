@@ -233,11 +233,11 @@ fi
 
 bq rm -f "$BQ_MONITOR_DATASET"."$PROCESS_RESULT_TABLE_ID"
 bq mk -t "$BQ_MONITOR_DATASET"."$PROCESS_RESULT_TABLE_ID" \
-  operation:STRING,timestamp:STRING,batch_id:INTEGER,success_count:INTEGER,failure_count:INTEGER,skipped_count:INTEGER
+  channel:STRING,operation:STRING,timestamp:STRING,batch_id:INTEGER,success_count:INTEGER,failure_count:INTEGER,skipped_count:INTEGER
 
 bq rm -f "$BQ_MONITOR_DATASET"."$ITEM_RESULTS_TABLE_ID"
 bq mk -t "$BQ_MONITOR_DATASET"."$ITEM_RESULTS_TABLE_ID" \
-  item_id:STRING,batch_id:INTEGER,operation:STRING,result:STRING,error:STRING,timestamp:STRING
+  item_id:STRING,batch_id:INTEGER,channel:STRING,operation:STRING,result:STRING,error:STRING,timestamp:STRING
 
 print_green "Creating scheduled Queries..."
 # Remove any pre-existing scheduled queries from the Cloud project
@@ -390,6 +390,7 @@ gcloud composer environments create "$CLOUD_COMPOSER_ENV_NAME" \
   --machine-type n1-standard-1 \
   --env-variables PROJECT_ID="$GCP_PROJECT",LOCATION="$REGION",PUBSUB_TOPIC="$PUBSUB_TOPIC_MAILER"
 
+echo "Installing Python libraries in Cloud Composer..."
 COMPOSER_UPDATE_RESULT=$(gcloud composer environments update "$CLOUD_COMPOSER_ENV_NAME" \
   --location "$REGION" \
   --update-pypi-packages-from-file composer/completion_monitor/requirements.txt \
@@ -407,6 +408,7 @@ else
   echo "$COMPOSER_UPDATE_RESULT"
 fi
 
+echo "Updating Cloud Composer configuration..."
 COMPOSER_UPDATE_RESULT=$(gcloud composer environments update "$CLOUD_COMPOSER_ENV_NAME" \
   --location "$REGION" \
   --update-airflow-configs=api-auth_backend=airflow.api.auth.backend.default \

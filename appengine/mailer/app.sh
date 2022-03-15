@@ -21,11 +21,11 @@ elif [[ $1 == 'test' ]]; then
   python -m runner /usr/lib/google-cloud-sdk/
 elif [[ $1 = 'prod' ]]; then
   if [[ "$#" -le 3 ]]; then
-    echo "Project ID, Pubsub Token, and Email To Address is required when deploying to prod."
+    echo "Project ID, Cloud Pub/Sub Token, email address and a flag for enabling Local Inventory are required when deploying to prod."
   else
     pip install -U setuptools
     pip install -r "$CURRENT_DIRECTORY"/requirements.txt -t "$CURRENT_DIRECTORY"/lib
-    sed -e "s/<PROJECT_ID>/$2/g; s/<PUBSUB_TOKEN>/$3/g; s/<EMAIL_TO>/$4/g" \
+    sed -e "s/<PUBSUB_TOKEN>/$3/g; s/<EMAIL_TO>/$4/g; s/<USE_LOCAL_INVENTORY_ADS>/$5/g" \
       "$CURRENT_DIRECTORY"/app_template.yaml > "$CURRENT_DIRECTORY"/app.yaml
     gcloud beta app deploy "$CURRENT_DIRECTORY"/app.yaml \
       --project "$2" --quiet \

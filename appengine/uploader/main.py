@@ -19,11 +19,10 @@ This module receives batch jobs from TaskQueue. For each job, the module loads
 data from BigQuery and sends it to Merchant Center.
 """
 
-from distutils import util
+from distutils import util as dist_util
 import http
 import json
 import logging
-import os
 import socket
 from typing import List, Tuple
 
@@ -41,6 +40,7 @@ import shoptimizer_client
 from models import failure
 from models import process_result
 from models import upload_task
+import utils
 
 app = flask.Flask(__name__)
 
@@ -58,24 +58,24 @@ TASK_RETRY_LIMIT = 5
 
 
 @app.route('/insert_items', methods=['POST'])
-def run_insert_process() -> Tuple[str, http.HTTPStatus]:
+def run_insert_process() -> Tuple[str, int]:
   """Handles uploading tasks pushed from Task Queue."""
   return _run_process(constants.Operation.UPSERT)
 
 
 @app.route('/delete_items', methods=['POST'])
-def run_delete_process() -> Tuple[str, http.HTTPStatus]:
+def run_delete_process() -> Tuple[str, int]:
   """Handles deleting tasks pushed from Task Queue."""
   return _run_process(constants.Operation.DELETE)
 
 
 @app.route('/prevent_expiring_items', methods=['POST'])
-def run_prevent_expiring_process() -> Tuple[str, http.HTTPStatus]:
+def run_prevent_expiring_process() -> Tuple[str, int]:
   """Handles prevent expiring tasks pushed from Task Queue."""
   return _run_process(constants.Operation.PREVENT_EXPIRING)
 
 
-def _run_process(operation: constants.Operation) -> Tuple[str, http.HTTPStatus]:
+def _run_process(operation: constants.Operation) -> Tuple[str, int]:
   """Handles tasks pushed from Task Queue.
 
   When tasks are enqueued to Task Queue by initiator, this method will be
@@ -100,10 +100,15 @@ def _run_process(operation: constants.Operation) -> Tuple[str, http.HTTPStatus]:
   if task.batch_size == 0:
     return 'OK', http.HTTPStatus.OK
 
+  try:
+    channel = constants.Channel(task.channel)
+  except ValueError:
+    return 'Invalid channel', http.HTTPStatus.BAD_REQUEST
+
   batch_number = int(task.start_index / task.batch_size) + 1
   logging.info(
-      '%s started. Batch #%d info: start_index: %d, batch_size: %d,'
-      'initiation timestamp: %s', operation.value, batch_number,
+      '%s started. Batch %s #%d info: start_index: %d, batch_size: %d,'
+      'initiation timestamp: %s', channel.value, operation.value, batch_number,
       task.start_index, task.batch_size, task.timestamp)
 
   try:
@@ -115,22 +120,24 @@ def _run_process(operation: constants.Operation) -> Tuple[str, http.HTTPStatus]:
   try:
     if not items:
       logging.error(
-          'Batch #%d, operation %s: 0 items loaded from BigQuery so batch not '
+          'Batch %s #%d, operation %s: 0 items loaded from BigQuery so batch not '
           'sent to Content API. Start_index: %d, batch_size: %d, initiation '
-          'timestamp: %s, channel: %s', batch_number, operation.value,
-          task.start_index, task.batch_size, task.timestamp, task.channel)
+          'timestamp: %s', channel.value, batch_number, operation.value,
+          task.start_index, task.batch_size, task.timestamp)
       return 'No items to process', http.HTTPStatus.OK
 
     method = OPERATION_TO_METHOD.get(operation)
 
     # Creates batch from items loaded from BigQuery
     original_batch, skipped_item_ids, batch_id_to_item_id = batch_creator.create_batch(
-        batch_number, items, method, task.channel)
+        batch_number, items, method, channel)
 
     # Optimizes batch via Shoptimizer for upsert/prevent_expiring operations
     try:
       shoptimizer_integration_on = (
-          util.strtobool(os.environ['SHOPTIMIZER_API_INTEGRATION_ON']))
+          dist_util.strtobool(
+              utils.load_environment_variable('SHOPTIMIZER_API_INTEGRATION_ON'))
+      )
     except ValueError:
       shoptimizer_integration_on = False
 
@@ -144,7 +151,7 @@ def _run_process(operation: constants.Operation) -> Tuple[str, http.HTTPStatus]:
     api_client = content_api_client.ContentApiClient()
     successful_item_ids, item_failures = api_client.process_items(
         batch_to_send_to_content_api, batch_number, batch_id_to_item_id, method,
-        task.channel)
+        channel)
 
     result = process_result.ProcessResult(
         successfully_processed_item_ids=successful_item_ids,
@@ -166,17 +173,17 @@ def _run_process(operation: constants.Operation) -> Tuple[str, http.HTTPStatus]:
     return error_reason, error_status_code
   else:
     logging.info(
-        'Batch #%d with operation %s, initiation timestamp %s, and channel %s '
+        'Batch %s #%d with operation %s, initiation timestamp %s '
         'successfully processed %s items, failed to process %s items and '
-        'skipped %s items.', batch_number, operation.value, task.timestamp,
-        task.channel, result.get_success_count(), result.get_failure_count(),
+        'skipped %s items.', channel.value, batch_number, operation.value,
+        task.timestamp, result.get_success_count(), result.get_failure_count(),
         result.get_skipped_count())
   finally:
     recorder = result_recorder.ResultRecorder.from_service_account_json(
         constants.GCP_SERVICE_ACCOUNT_PATH, constants.DATASET_ID_FOR_MONITORING,
         constants.TABLE_ID_FOR_RESULT_COUNTS_MONITORING,
         constants.TABLE_ID_FOR_ITEM_RESULTS_MONITORING)
-    recorder.insert_result(operation.value, result, task.timestamp,
+    recorder.insert_result(channel, operation, result, task.timestamp,
                            batch_number)
   return 'OK', http.HTTPStatus.OK
 

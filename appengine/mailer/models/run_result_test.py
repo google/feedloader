@@ -19,6 +19,8 @@ import unittest
 
 import run_result
 
+CHANNEL_ONLINE = 'online'
+
 OPERATION_UPSERT = 'upsert'
 
 DUMMY_SUCCESS_COUNT = 1
@@ -30,12 +32,14 @@ class RunResultTest(unittest.TestCase):
 
   def test_from_dict(self):
     input_dict = {
+        'channel': CHANNEL_ONLINE,
         'operation': OPERATION_UPSERT,
         'success_count': DUMMY_SUCCESS_COUNT,
         'failure_count': DUMMY_FAILURE_COUNT,
         'skipped_count': DUMMY_SKIPPED_COUNT
     }
     result = run_result.RunResult.from_dict(input_dict)
+    self.assertEqual(CHANNEL_ONLINE, result.channel)
     self.assertEqual(OPERATION_UPSERT, result.operation)
     self.assertEqual(DUMMY_SUCCESS_COUNT, result.success_count)
     self.assertEqual(DUMMY_FAILURE_COUNT, result.failure_count)
@@ -43,6 +47,7 @@ class RunResultTest(unittest.TestCase):
 
   def test_get_total_count(self):
     input_dict = {
+        'channel': CHANNEL_ONLINE,
         'operation': OPERATION_UPSERT,
         'success_count': DUMMY_SUCCESS_COUNT,
         'failure_count': DUMMY_FAILURE_COUNT,

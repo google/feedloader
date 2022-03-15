@@ -51,10 +51,10 @@ class ContentApiClient(object):
       self._service = content_api_helper.initialize_api(
           constants.CONFIG_DIRECTORY, constants.MC_SERVICE_ACCOUNT_FILE)
 
-  def process_items(self, batch: constants.Batch, batch_number: int,
-                    batch_id_to_item_id: constants.BatchIdToItemId,
-                    method: constants.Method,
-                    channel: str) -> Tuple[List[str], List[failure.Failure]]:
+  def process_items(
+      self, batch: constants.Batch, batch_number: int,
+      batch_id_to_item_id: constants.BatchIdToItemId, method: constants.Method,
+      channel: constants.Channel) -> Tuple[List[str], List[failure.Failure]]:
     """Processes a list of items via a single batch to the API.
 
     Args:
@@ -62,31 +62,31 @@ class ContentApiClient(object):
       batch_number: Identifier for this batch.
       batch_id_to_item_id: Mapping from batch_id to item_id.
       method: Method being sent to the API.
-      channel: The Content API channel ("online" or "local").
+      channel: The shopping channel.
 
     Returns:
       An instance of ContentApiResult.
     """
     try:
       number_of_items = len(batch.get('entries', []))
-      logging.info('Batch #%d: Received %d items to submit via API',
-                   batch_number, number_of_items)
+      logging.info('Batch %s #%d: Received %d items to submit via API',
+                   channel.value, batch_number, number_of_items)
       response = self._submit_batch(batch)
       successful_item_ids, item_failures = _handle_response(
           response, batch_number, batch_id_to_item_id)
       logging.info(
           'Batch %s #%d: custombatch %s API successfully submitted %d of %d items',
-          channel, batch_number, method.value, len(successful_item_ids),
+          channel.value, batch_number, method.value, len(successful_item_ids),
           number_of_items)
     except errors.HttpError as http_error:
       logging.exception(
           'Batch %s #%d: Unhandled error occurred during batch call to API: %s',
-          channel, batch_number, http_error)
+          channel.value, batch_number, http_error)
       raise
     except socket.timeout as timeout_error:
       logging.exception(
           'Batch %s #%d: Socket timeout error occurred: %s. Check Merchant Center to confirm that the API call succeeded.',
-          channel, batch_number, timeout_error)
+          channel.value, batch_number, timeout_error)
       raise
     return successful_item_ids, item_failures
 

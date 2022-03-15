@@ -61,6 +61,12 @@ class Operation(enum.Enum):
   PREVENT_EXPIRING = 'prevent_expiring'
 
 
+class Channel(enum.Enum):
+  """Enum for shopping channels."""
+  ONLINE = 'online'
+  LOCAL = 'local'
+
+
 @enum.unique
 class ShoppingApiErrorCodes(enum.Enum):
   """An Enum class for mapping error values to the underlying error."""

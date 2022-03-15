@@ -18,7 +18,7 @@
 import json
 import logging
 import string
-from typing import Any, Dict, Mapping
+from typing import Any, Dict, List, Mapping
 
 import airflow
 from airflow import models
@@ -27,6 +27,7 @@ from airflow.contrib.hooks import gcp_pubsub_hook
 import attr
 import pandas_gbq
 
+_KEY_CHANNEL = 'channel'
 _KEY_OPERATION = 'operation'
 _KEY_SUCCESS_COUNT = 'success_count'
 _KEY_FAILURE_COUNT = 'failure_count'
@@ -36,13 +37,14 @@ _KEY_SKIPPED_COUNT = 'skipped_count'
 @attr.s(auto_attribs=True)
 class RunResult(object):
   """Class to save the result of Content API call."""
+  channel: str
   operation: str
   success_count: int
   failure_count: int
   skipped_count: int
 
 
-def _convert_run_result_into_json(result: RunResult) -> Mapping[str, Any]:
+def _convert_run_result_into_json(result: RunResult) -> Dict[str, Any]:
   """Convert ContentApiResult to JSON-encodable dict.
 
   Args:
@@ -52,6 +54,7 @@ def _convert_run_result_into_json(result: RunResult) -> Mapping[str, Any]:
     JSON-encodable dict to be included in a Pub/Sub message.
   """
   result_dict = {
+      _KEY_CHANNEL: result.channel,
       _KEY_OPERATION: result.operation,
       _KEY_SUCCESS_COUNT: result.success_count,
       _KEY_FAILURE_COUNT: result.failure_count,
@@ -140,8 +143,8 @@ class GetRunResultsAndTriggerReportingOperator(models.BaseOperator):
       raise airflow.AirflowException(
           'Failed to call Cloud Pub/Sub API') from pubsub_api_error
 
-  def _load_run_results_from_bigquery(
-      self, query_file_path: str) -> Dict[str, RunResult]:
+  def _load_run_results_from_bigquery(self,
+                                      query_file_path: str) -> List[RunResult]:
     """Reads process result from BigQuery and return it as a dictionary.
 
     Args:
@@ -167,14 +170,15 @@ class GetRunResultsAndTriggerReportingOperator(models.BaseOperator):
     except pandas_gbq.gbq.GenericGBQException as bgq_error:
       raise BigQueryAPICallError(
           'BigQuery API call got an error') from bgq_error
-    results = {}
+    results = []
     for _, row in query_result.iterrows():
       result = RunResult(
+          channel=row[_KEY_CHANNEL],
           operation=row[_KEY_OPERATION],
           success_count=row[_KEY_SUCCESS_COUNT],
           failure_count=row[_KEY_FAILURE_COUNT],
           skipped_count=row[_KEY_SKIPPED_COUNT])
-      results[row[_KEY_OPERATION]] = result
+      results.append(result)
     return results
 
   def _send_run_results_to_pubsub(self, results: Mapping[str,

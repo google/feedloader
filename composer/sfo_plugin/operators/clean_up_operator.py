@@ -71,6 +71,8 @@ class CleanUpOperator(models.BaseOperator):
       storage_hook = gcs_hook.GoogleCloudStorageHook()
       storage_hook.delete(bucket=self._bucket_id, object='EOF.lock')
       logging.info('Successfully deleted the EOF.lock file.')
+    except cloud_exceptions.NotFound:
+      logging.info('EOF.lock is not found. It might have been already deleted.')
     except cloud_exceptions.GoogleCloudError as gcs_api_error:
       raise exceptions.AirflowException(
           'Cloud Storage API returned an error while deleting EOF.lock.'

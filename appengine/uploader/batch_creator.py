@@ -15,16 +15,16 @@
 
 """Creates a batch of product data to send to Content API for Shopping."""
 
-from distutils import util
+from distutils import util as dist_util
 import logging
 import numbers
-import os
 import string
 from typing import Any, List, Tuple, Union
 
 from google.cloud import bigquery
 
 import constants
+import utils
 
 _FIELDS_TO_IGNORE = frozenset(['google_merchant_id'])
 _PRODUCT_ID_FORMAT = '{channel}:{contentLanguage}:{targetCountry}:{offerId}'
@@ -32,7 +32,7 @@ _PRODUCT_ID_FORMAT = '{channel}:{contentLanguage}:{targetCountry}:{offerId}'
 
 def create_batch(
     batch_number: int, item_rows: List[bigquery.Row], method: constants.Method,
-    channel: str
+    channel: constants.Channel
 ) -> Tuple[constants.Batch, List[str], constants.BatchIdToItemId]:
   """Processes a list of items into a batch ready to submit to the API.
 
@@ -43,7 +43,7 @@ def create_batch(
     batch_number: The id used to track this batch for logging purposes
     item_rows: List of rows from BigQuery items table.
     method: The operation to carry out on these items (Add Delete etc)
-    channel: The ads destination channel. One of 'local' or 'online'.
+    channel: The shopping destination channel.
 
   Returns:
     A tuple representing the batch object (dict), a list of skipped items and a
@@ -54,7 +54,7 @@ def create_batch(
   batch_id_to_item_id = {}
 
   try:
-    is_mca = util.strtobool(os.environ['IS_MCA'])
+    is_mca = dist_util.strtobool(utils.load_environment_variable('IS_MCA'))
   except ValueError:
     is_mca = False
 
@@ -70,7 +70,7 @@ def create_batch(
         skipped_item_ids.append(item_id)
         continue
     else:
-      merchant_id = os.environ['MERCHANT_ID']
+      merchant_id = utils.load_environment_variable('MERCHANT_ID')
 
     entry = {
         'batchId': batch_id,
@@ -92,16 +92,15 @@ def create_batch(
   return batch, skipped_item_ids, batch_id_to_item_id
 
 
-def _convert_item_to_content_api_format(batch_number: int,
-                                        item_row: Union[bigquery.Row,
-                                                        constants.Product],
-                                        channel: str) -> constants.Product:
+def _convert_item_to_content_api_format(
+    batch_number: int, item_row: Union[bigquery.Row, constants.Product],
+    channel: constants.Channel) -> constants.Product:
   """Converts item to the format required by the API.
 
   Args:
     batch_number: The id used to track this batch for logging purposes
     item_row: Dictionary representation of the input item
-    channel: The ads destination channel. One of 'local' or 'online'.
+    channel: The shopping destination channel.
 
   Returns:
     An item (dict) that has all fields (keys and values) mapped from the input
@@ -121,7 +120,7 @@ def _convert_item_to_content_api_format(batch_number: int,
                     item_row['item_id'], str(e))
   api_formatted_item['contentLanguage'] = constants.CONTENT_LANGUAGE
   api_formatted_item['targetCountry'] = constants.TARGET_COUNTRY
-  api_formatted_item['channel'] = channel
+  api_formatted_item['channel'] = channel.value
 
   return api_formatted_item
 

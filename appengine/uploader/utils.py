@@ -1,3 +1,4 @@
+# coding=utf-8
 # Copyright 2022 Google LLC.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,22 +13,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-runtime: python27
-api_version: 1
-threadsafe: true
-service: mailer
+"""Utility functions."""
+import os
 
-handlers:
-- url: /.*
-  script: main.app
 
-libraries:
-- name: ssl
-  version: latest
-- name: jinja2
-  version: latest
-
-env_variables:
-  PUBSUB_VERIFICATION_TOKEN: "<PUBSUB_TOKEN>"
-  EMAIL_TO: "<EMAIL_TO>"
-  USE_LOCAL_INVENTORY_ADS: "<USE_LOCAL_INVENTORY_ADS>"
+def load_environment_variable(key: str) -> str:
+  """Returns a value of environment variable."""
+  return os.environ.get(key, '')

@@ -20,6 +20,7 @@ import attr
 @attr.s
 class RunResult(object):
   """Class to save the result of Content API call."""
+  channel = attr.ib(default='')
   operation = attr.ib(default='')
   description = attr.ib(default='')
   success_count = attr.ib(default=0)
@@ -36,12 +37,13 @@ class RunResult(object):
     Returns:
       An instance of RunResult generated from the input dict.
     """
+    channel = result_dict.get('channel', '')
     operation = result_dict.get('operation', '')
     description = result_dict.get('description', '')
     success_count = result_dict.get('success_count', 0)
     failure_count = result_dict.get('failure_count', 0)
     skipped_count = result_dict.get('skipped_count', 0)
-    return cls(operation, description, success_count, failure_count,
+    return cls(channel, operation, description, success_count, failure_count,
                skipped_count)
 
   def get_total_count(self):

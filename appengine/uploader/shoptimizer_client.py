@@ -17,12 +17,12 @@
 
 import json
 import logging
-import os
 from typing import Any, Dict
 
 import requests
 
 import constants
+import utils
 
 _CONFIG_FILE_PATH = 'config/shoptimizer_config.json'
 _ERROR_MSG_TEMPLATE = ('Request for batch #%d with operation %s encountered an '
@@ -57,7 +57,7 @@ class ShoptimizerClient(object):
       The optimized batch of product data if no errors encountered,
       or the original batch of product data otherwise.
     """
-    shoptimizer_base_url = os.environ.get('SHOPTIMIZER_URL', '')
+    shoptimizer_base_url = utils.load_environment_variable('SHOPTIMIZER_URL')
 
     if not self._is_input_valid(batch, shoptimizer_base_url):
       return batch

@@ -15,11 +15,12 @@
 
 """Unit tests for result_recorder.py."""
 
-import unittest
 from unittest import mock
 
+from absl.testing import parameterized
 from google.cloud import bigquery
 
+import constants
 from models import failure
 from models import process_result
 import result_recorder
@@ -80,7 +81,7 @@ def _build_mock_client():
   return client
 
 
-class ResultRecorderTest(unittest.TestCase):
+class ResultRecorderTest(parameterized.TestCase):
 
   def setUp(self):
     super(ResultRecorderTest, self).setUp()
@@ -95,13 +96,23 @@ class ResultRecorderTest(unittest.TestCase):
         count_results_table_reference=self.count_results_table_reference,
         item_results_table_reference=self.id_results_table_reference)
 
-  def test_insert_count_result_with_correct_types(self):
-    operation = 'insert'
+  @parameterized.named_parameters(
+      {
+          'testcase_name': 'online',
+          'channel': constants.Channel.ONLINE,
+      },
+      {
+          'testcase_name': 'local',
+          'channel': constants.Channel.LOCAL,
+      },
+  )
+  def test_insert_count_result_with_correct_types(self, channel):
     timestamp = '000101010100'
     batch_id = 0
     result = process_result.ProcessResult(
         ['0001'], [failure.Failure('0002', 'Error message')], ['0003'])
 
-    self.recorder.insert_result(operation, result, timestamp, batch_id)
+    self.recorder.insert_result(channel, constants.Operation.UPSERT, result,
+                                timestamp, batch_id)
 
     self.client.insert_rows.assert_called()

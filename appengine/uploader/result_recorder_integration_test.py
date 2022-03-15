@@ -15,10 +15,10 @@
 
 """Integration tests for result_recorder.py."""
 
-import os
 import unittest
 
 import result_recorder
+import utils
 
 # Download service account key from GCP console and place it as a file which
 # SERVICE_ACCOUNT_PATH points to.
@@ -30,7 +30,7 @@ _WRONG_SERVICE_ACCOUNT_PATH = './wrong_path/gcp_service_account.json'
 _DATASET_NAME = 'test_dataset'
 _TABLE_COUNTS_NAME = 'test_table_counts'
 _TABLE_ITEMS_NAME = 'test_table_items'
-_PROJECT_ID = os.environ['PROJECT_ID']
+_PROJECT_ID = utils.load_environment_variable('PROJECT_ID')
 
 
 class ResultRecorderIntegrationTest(unittest.TestCase):

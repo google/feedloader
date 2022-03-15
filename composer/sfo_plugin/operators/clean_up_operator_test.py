@@ -21,9 +21,10 @@ import unittest.mock as mock
 
 from airflow import exceptions
 from airflow import models
-
 from airflow.contrib.hooks import bigquery_hook
 from airflow.contrib.hooks import gcs_hook
+from google.cloud import exceptions as cloud_exceptions
+
 from sfo_plugin.operators import clean_up_operator
 
 _DAG_ID = 'test_dag'
@@ -57,11 +58,31 @@ class CleanUpOperatorTest(unittest.TestCase):
         deletion_dataset_table=f'{_DATASET_ID}.{_TABLE_ID}',
         ignore_if_missing=True)
 
-  def test_execute_should_stop_airflow_when_getting_api_error(self):
+  def test_execute_should_stop_airflow_with_bq_api_error(self):
     self._mock_bq_hook.return_value.get_cursor.return_value.run_table_delete.side_effect = Exception(
     )
     with self.assertRaises(exceptions.AirflowException):
       self._task.execute(self._context)
+
+  def test_execute_should_delete_lock_file(self):
+    self._task.execute(self._context)
+    self._mock_gcs_hook.return_value.delete.assert_called_with(
+        bucket=_BUCKET_ID, object='EOF.lock')
+
+  def test_execute_should_stop_airflow_with_cloud_storage_error(self):
+    self._mock_gcs_hook.return_value.delete.side_effect = cloud_exceptions.GoogleCloudError(
+        message='GCP Error')
+    with self.assertRaises(exceptions.AirflowException):
+      self._task.execute(self._context)
+
+  def test_execute_should_not_raise_airflow_error_when_lock_file_is_not_found(
+      self):
+    self._mock_gcs_hook.return_value.delete.side_effect = cloud_exceptions.NotFound(
+        message='No such object')
+    try:
+      self._task.execute(self._context)
+    except exceptions.AirflowException:
+      self.fail('AirflowException was raised unexpectedly')
 
   def test_execute_should_delete_eof_lock(self):
     self._task.execute(self._context)

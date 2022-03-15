@@ -63,7 +63,7 @@ steps:
   - update_reporter_pubsub
 - name: 'gcr.io/cloud-builders/gcloud'
   entrypoint: '/bin/bash'
-  args: ['-c', 'apt-get -y update && apt-get -y install python2.7 && curl https://bootstrap.pypa.io/pip/2.7/get-pip.py --output get-pip.py && python2 get-pip.py && pip2 install --upgrade pip==20.3.4 && bash appengine/mailer/app.sh prod ${_GCP_PROJECT} ${_PUBSUB_TOKEN} ${_FINISH_EMAILS}']
+  args: ['-c', 'apt-get -y update && apt-get -y install python2.7 && curl https://bootstrap.pypa.io/pip/2.7/get-pip.py --output get-pip.py && python2 get-pip.py && pip2 install --upgrade pip==20.3.4 && bash appengine/mailer/app.sh prod ${_GCP_PROJECT} ${_PUBSUB_TOKEN} ${_FINISH_EMAILS} ${_USE_LOCAL_INVENTORY_ADS}']
   waitFor:
   - deploy_default
 timeout: 3600s

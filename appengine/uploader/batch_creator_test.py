@@ -24,7 +24,7 @@ import batch_creator
 import constants
 import test_utils
 
-DUMMY_CHANNEL = 'online'
+DUMMY_CHANNEL = constants.Channel.ONLINE
 DUMMY_MERCHANT_ID = '1234567'
 ITEM_WITH_DESCRIPTION_EMPTY = {'description': ''}
 ITEM_WITH_CONDITION_USED = {'condition': 'used'}

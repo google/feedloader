@@ -226,7 +226,8 @@
                             <td valign="top" align="left" style="font-family:Roboto, Helvetica, Arial sans-serif; font-size: 14px; line-height:24px; color: #414347; padding:20px 40px 20px 40px;">
                                 <p>Processing of the Shopping Feed upload to Content API has completed
                                     on {{ fullTimestamp }} for your project "{{ projectId }}".</p>
-                                <h3>Run Results:</h3>
+
+                                <h3>Run Results for Online Shopping:</h3>
                                 <table border="1" align="center" width="100%" style="border-collapse: collapse; table-layout: fixed">
                                     <tr align="center" valign="top">
                                         <th></th>
@@ -238,7 +239,7 @@
                                         <th>Failed</th>
                                         <th>Missing Merchant ID <small>(not processed)</small></th>
                                     </tr>
-                                    {% for result in runResults %}
+                                    {% for result in runResults['online'] %}
                                         <tr align="center">
                                             <td><i>{{ result.description }}</i></td>
                                             <td>{{ result.success_count }}</td>
@@ -247,7 +248,33 @@
                                         </tr>
                                     {% endfor %}
                                 </table>
-                                <h3>Products Processed: {{ totalItemsProcessed }}</h3>
+                                <h3>Products Processed: {{ totalItemsProcessed['online'] }}</h3>
+
+                                {% if useLocalInventoryAds %}
+                                <h3>Run Results for Local Inventory:</h3>
+                                <table border="1" align="center" width="100%" style="border-collapse: collapse; table-layout: fixed">
+                                    <tr align="center" valign="top">
+                                        <th></th>
+                                        <th colspan="3">Content API Result</th>
+                                    </tr>
+                                    <tr align="center" valign="top">
+                                        <th></th>
+                                        <th>Succeeded</th>
+                                        <th>Failed</th>
+                                        <th>Missing Merchant ID <small>(not processed)</small></th>
+                                    </tr>
+                                    {% for result in runResults['local'] %}
+                                        <tr align="center">
+                                            <td><i>{{ result.description }}</i></td>
+                                            <td>{{ result.success_count }}</td>
+                                            <td>{{ result.failure_count }}</td>
+                                            <td>{{ result.skipped_count }}</td>
+                                        </tr>
+                                    {% endfor %}
+                                </table>
+                                <h3>Products Processed: {{ totalItemsProcessed['local'] }}</h3>
+                                {% endif %}
+
                                 <p>For more details on the results of this run or for more information about failures, please click on the link below to be
                                     directed to the Google Cloud Console logs.</p>
                             </td>

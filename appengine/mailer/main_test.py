@@ -18,27 +18,34 @@
 import unittest
 from google.appengine.ext import testbed
 
+from absl.testing import parameterized
 import json
 import main
+import mock
 
 _HTTP_OK = 200
 _HTTP_UNAUTHORIZED = 401
 
-DUMMY_SUCCESS_COUNT = 1
-DUMMY_FAILURE_COUNT = 2
-DUMMY_SKIPPED_COUNT = 3
+_KEY_CHANNEL = 'channel'
+_CHANNEL_ONLINE = 'online'
+_CHANNEL_LOCAL = 'local'
 
-OPERATION_UPSERT = 'upsert'
-OPERATION_DELETE = 'delete'
-OPERATION_PREVENT_EXPIRING = 'prevent_expiring'
+_KEY_OPERATION = 'operation'
+_OPERATION_UPSERT = 'upsert'
+_OPERATION_DELETE = 'delete'
+_OPERATION_PREVENT_EXPIRING = 'prevent_expiring'
 
-KEY_OPERATION = 'operation'
-KEY_SUCCESS_COUNT = 'success_count'
-KEY_FAILURE_COUNT = 'failure_count'
-KEY_SKIPPED_COUNT = 'skipped_count'
+_KEY_SUCCESS_COUNT = 'success_count'
+_KEY_FAILURE_COUNT = 'failure_count'
+_KEY_SKIPPED_COUNT = 'skipped_count'
+_DUMMY_SUCCESS_COUNT = 1
+_DUMMY_FAILURE_COUNT = 2
+_DUMMY_SKIPPED_COUNT = 3
+
+_DUMMY_PUBSUB_TOKEN = 'testtoken'
 
 
-class MainTest(unittest.TestCase):
+class MainTest(parameterized.TestCase):
 
   def setUp(self):
     super(MainTest, self).setUp()
@@ -47,9 +54,13 @@ class MainTest(unittest.TestCase):
     self.testbed.activate()
     self.testbed.init_mail_stub()
     self.mail_stub = self.testbed.get_stub(testbed.MAIL_SERVICE_NAME)
-    main.app.config['PUBSUB_VERIFICATION_TOKEN'] = 'testtoken'
-    main.app.config['EMAIL_TO'] = 'testemailaddress'
+    self.testbed.setup_env(PUBSUB_VERIFICATION_TOKEN=_DUMMY_PUBSUB_TOKEN)
+    self.testbed.setup_env(EMAIL_TO='testemailaddress')
+    self.testbed.setup_env(USE_LOCAL_INVENTORY_ADS='False')
+    mock.patch('main._project_id').start()
+    main._project_id.return_value = 'test-project-id'
     self.test_client = main.app.test_client()
+    self.addCleanup(mock.patch.stopall)
 
   def tearDown(self):
     super(MainTest, self).tearDown()
@@ -59,9 +70,17 @@ class MainTest(unittest.TestCase):
     response = self.test_client.get('/health')
     self.assertEqual(_HTTP_OK, response.status_code)
 
-  def test_pubsub_push_success(self):
-    request_params = {'token': 'testtoken'}
-    request_data = _create_pubsub_msg()
+  @parameterized.named_parameters(
+      {
+          'testcase_name': 'online_and_local',
+          'channels': (_CHANNEL_ONLINE, _CHANNEL_LOCAL)
+      }, {
+          'testcase_name': 'online_only',
+          'channels': (_CHANNEL_ONLINE,)
+      })
+  def test_pubsub_push_success(self, channels):
+    request_params = {'token': _DUMMY_PUBSUB_TOKEN}
+    request_data = _create_pubsub_msg(channels)
     response = self.test_client.post(
         '/pubsub/push', query_string=request_params, data=request_data)
     self.assertEqual(_HTTP_OK, response.status_code)
@@ -73,6 +92,30 @@ class MainTest(unittest.TestCase):
         '/pubsub/push', query_string=request_params, data='{}')
     self.assertEqual(_HTTP_OK, response.status_code)
 
+  @mock.patch('google.appengine.api.mail.EmailMessage')
+  def test_local_results_are_added_to_email_content_when_local_inventory_is_enabled(
+      self, email_message):
+    self.testbed.setup_env(USE_LOCAL_INVENTORY_ADS='True', overwrite=True)
+    request_params = {'token': _DUMMY_PUBSUB_TOKEN}
+    channels = (_CHANNEL_ONLINE, _CHANNEL_LOCAL)
+    request_data = _create_pubsub_msg(channels)
+    self.test_client.post(
+        '/pubsub/push', query_string=request_params, data=request_data)
+    email_content = email_message.call_args.kwargs['html']
+    self.assertIn('Run Results for Local Inventory:', email_content)
+
+  @mock.patch('google.appengine.api.mail.EmailMessage')
+  def test_local_results_are_not_added_to_email_content_when_local_inventory_is_disabled(
+      self, email_message):
+    self.testbed.setup_env(USE_LOCAL_INVENTORY_ADS='False', overwrite=True)
+    request_params = {'token': _DUMMY_PUBSUB_TOKEN}
+    channels = (_CHANNEL_ONLINE,)
+    request_data = _create_pubsub_msg(channels)
+    self.test_client.post(
+        '/pubsub/push', query_string=request_params, data=request_data)
+    email_content = email_message.call_args.kwargs['html']
+    self.assertNotIn('Run Results for Local Inventory:', email_content)
+
   def test_pubsub_push_failure(self):
     request_params = {'token': 'wrongtoken'}
     response = self.test_client.post(
@@ -80,40 +123,25 @@ class MainTest(unittest.TestCase):
     self.assertEqual(_HTTP_UNAUTHORIZED, response.status_code)
 
 
-def _create_pubsub_msg():
-  # Create string interpolation dict for Python 2 string interpolation
-  msg_dict = {
-      'operation_upsert': OPERATION_UPSERT,
-      'operation_delete': OPERATION_DELETE,
-      'operation_prevent_expiring': OPERATION_PREVENT_EXPIRING,
-      'operation': KEY_OPERATION,
-      'success_count_key': KEY_SUCCESS_COUNT,
-      'failure_count_key': KEY_FAILURE_COUNT,
-      'skipped_count_key': KEY_SKIPPED_COUNT,
-      'success_count': DUMMY_SUCCESS_COUNT,
-      'failure_count': DUMMY_FAILURE_COUNT,
-      'skipped_count': DUMMY_SKIPPED_COUNT
-  }
+def _create_pubsub_msg(channels=(_CHANNEL_ONLINE,)):
   # Create PubSub message main body
-  content_api_result_dict = (
-      '{{"{operation_upsert}": {{"{operation}": "{operation_upsert}", '
-      '"{success_count_key}": {success_count}, '
-      '"{failure_count_key}": {failure_count}, '
-      '"{skipped_count_key}": {skipped_count}}}, '
-      '"{operation_delete}": {{"{operation}": "{operation_delete}", '
-      '"{success_count_key}": {success_count}, '
-      '"{failure_count_key}": {failure_count}, '
-      '"{skipped_count_key}": {skipped_count}}}, '
-      '"{operation_prevent_expiring}": {{"{operation}": '
-      '"{operation_prevent_expiring}", "{success_count_key}": '
-      '{success_count}, "{failure_count_key}": '
-      '{failure_count}, "{skipped_count_key}": '
-      '{skipped_count}}}}}').format(**msg_dict)
+  content_api_result_in_list = []
+  for channel in channels:
+    for operation in (_OPERATION_UPSERT, _OPERATION_DELETE,
+                      _OPERATION_PREVENT_EXPIRING):
+      content_api_result_in_list.append({
+          _KEY_CHANNEL: channel,
+          _KEY_OPERATION: operation,
+          _KEY_SUCCESS_COUNT: _DUMMY_SUCCESS_COUNT,
+          _KEY_FAILURE_COUNT: _DUMMY_FAILURE_COUNT,
+          _KEY_SKIPPED_COUNT: _DUMMY_SKIPPED_COUNT
+      })
+  content_api_result_in_string = json.dumps(content_api_result_in_list)
   # Wrap main body in PubSub message wrapper
   expected_publish_message = {
       'message': {
           'attributes': {
-              'content_api_results': content_api_result_dict,
+              'content_api_results': content_api_result_in_string,
           }
       }
   }

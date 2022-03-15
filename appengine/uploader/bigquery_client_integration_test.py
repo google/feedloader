@@ -13,13 +13,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 """Integration tests for BigQuery Client."""
 
-import os
 import unittest
 
 import bigquery_client
+import utils
 
 # Download service account key from GCP console and place it as a file which
 # SERVICE_ACCOUNT_PATH points to.
@@ -29,7 +28,7 @@ import bigquery_client
 SERVICE_ACCOUNT_PATH = './config/gcp_service_account.json'
 DATASET_NAME = 'test_dataset'
 TABLE_NAME = 'test_table'
-PROJECT_ID = os.environ['PROJECT_ID']
+PROJECT_ID = utils.load_environment_variable('PROJECT_ID')
 
 
 class BigQueryClientTest(unittest.TestCase):

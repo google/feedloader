@@ -17,18 +17,21 @@
  * Output example in JSON format:
  * [
  *   {
+ *     "channel": "online",
  *     "operation": "delete",
  *     "success_count": "1",
  *     "failure_count": "2",
  *     "skipped_count": "3",
  *   },
  *   {
+ *     "channel": "online",
  *     "operation": "upsert",
  *     "success_count": "4",
  *     "failure_count": "5"
  *     "skipped_count": "6",
  *   },
  *   {
+ *     "channel": "online",
  *     "operation": "prevent_expiring",
  *     "success_count": "7",
  *     "failure_count": "8"
@@ -36,30 +39,32 @@
  *   }
  * ]
  */
+
 SELECT
-  DEDUPLICATED_RUN_RESULTS.operation,
-  SUM(DEDUPLICATED_RUN_RESULTS.success_count) AS success_count,
-  SUM(DEDUPLICATED_RUN_RESULTS.failure_count) AS failure_count,
-  SUM(DEDUPLICATED_RUN_RESULTS.skipped_count) AS skipped_count
+  UniqueRunResults.channel,
+  UniqueRunResults.operation,
+  SUM(UniqueRunResults.success_count) AS success_count,
+  SUM(UniqueRunResults.failure_count) AS failure_count,
+  SUM(UniqueRunResults.skipped_count) AS skipped_count
 FROM
   (
     SELECT
-      PROCESS_RESULT.operation AS operation,
-      MAX(PROCESS_RESULT.success_count) AS success_count,
-      MIN(PROCESS_RESULT.failure_count) AS failure_count,
-      MIN(PROCESS_RESULT.skipped_count) AS skipped_count
+      ProcessResults.channel AS channel,
+      ProcessResults.operation AS operation,
+      MAX(ProcessResults.success_count) AS success_count,
+      MIN(ProcessResults.failure_count) AS failure_count,
+      MIN(ProcessResults.skipped_count) AS skipped_count
     FROM
-      `${project_id}.${dataset_id}.${table_id}` AS PROCESS_RESULT
+      `${project_id}.${dataset_id}.${table_id}` AS ProcessResults
     WHERE
-      PROCESS_RESULT.timestamp =
-        (
-          SELECT
-             MAX(timestamp)
-           FROM
-             `${project_id}.${dataset_id}.${table_id}`
-        )
+      ProcessResults.timestamp = (
+        SELECT
+          MAX(timestamp)
+        FROM
+          `${project_id}.${dataset_id}.${table_id}`
+      )
     GROUP BY
-      PROCESS_RESULT.operation, PROCESS_RESULT.batch_id
-  ) AS DEDUPLICATED_RUN_RESULTS
+      ProcessResults.channel, ProcessResults.operation, ProcessResults.batch_id
+  ) AS UniqueRunResults
 GROUP BY
-  DEDUPLICATED_RUN_RESULTS.operation;
+  UniqueRunResults.channel, UniqueRunResults.operation;
