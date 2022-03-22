@@ -275,6 +275,21 @@ This behavior is defined in the below table:
 |**"google_merchant_id" column is missing or value is equivalent to boolean False (empty, 0, etc)**|Item is "skipped" in processing and not added to the batch + a warning is logged| The env var "DEFAULT_MERCHANT_ID" is used as the destination merchant_id in API calls|
 |**"google_merchant_id" exists and is set to a value not equivalent to boolean False**|The "google_merchant_id" value in each row of the feed file is used as the destination merchant_id in API calls| The env var "DEFAULT_MERCHANT_ID" is used as the destination merchant_id in API calls|
 
+## Local Inventory Ads ("LIA") Feature
+
+Feedloader has the option to enable sending product data to Content API as LIA
+(Local Inventory Ads) in addition to online ads. If your inventory is also local
+and you would like to take advantage of LIA, set the ``in`env.sh` to "True" and
+install Feedloader to enable this.
+
+*By default, this setting will automatically be off, meaning products are sent
+to only the online destination when `USE_LOCAL_INVENTORY_ADS` was not set, or
+was set to "False".*
+
+IMPORTANT NOTE: Currently Feedloader does not support "partial-LIA" (i.e. by
+enabling this setting, **all** products will be sent as **both** online and LIA
+ads).
+
 ## Optimizations
 
 Before Feedloader sends product data to Content API, it has the option to
