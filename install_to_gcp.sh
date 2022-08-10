@@ -388,7 +388,7 @@ gcloud composer environments create "$CLOUD_COMPOSER_ENV_NAME" \
   --zone "$CLOUD_COMPOSER_ZONE" \
   --python-version 3 \
   --machine-type n1-standard-1 \
-  --env-variables PROJECT_ID="$GCP_PROJECT",LOCATION="$REGION",PUBSUB_TOPIC="$PUBSUB_TOPIC_MAILER"
+  --env-variables LOCATION="$REGION",PUBSUB_TOPIC="$PUBSUB_TOPIC_MAILER"
 
 echo "Installing Python libraries in Cloud Composer..."
 COMPOSER_UPDATE_RESULT=$(gcloud composer environments update "$CLOUD_COMPOSER_ENV_NAME" \
