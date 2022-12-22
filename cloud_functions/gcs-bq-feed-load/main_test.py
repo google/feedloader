@@ -121,7 +121,7 @@ class ImportStorageFileIntoBigQueryTest(parameterized.TestCase):
                     mock_logging.output[0])
 
   @mock.patch('main._file_to_import_exists')
-  @mock.patch('main._perform_big_query_load')
+  @mock.patch('main._perform_bigquery_load')
   @mock.patch('main._save_imported_filename_to_gcs')
   def test_import_storage_file_into_big_query_validates_valid_schema(
       self, mock_save_imported_filename, mock_perform_bq_load,
@@ -143,7 +143,7 @@ class ImportStorageFileIntoBigQueryTest(parameterized.TestCase):
       mock_storage_client.assert_called()
 
   @mock.patch('main._file_to_import_exists')
-  @mock.patch('main._perform_big_query_load')
+  @mock.patch('main._perform_bigquery_load')
   @mock.patch('main._save_imported_filename_to_gcs')
   def test_import_storage_file_into_big_query_returns_on_invalid_schema(
       self, mock_save_imported_filename, mock_perform_bq_load,
@@ -167,7 +167,7 @@ class ImportStorageFileIntoBigQueryTest(parameterized.TestCase):
       self.assertIn('Schema is invalid', mock_logging.output[0])
 
   @mock.patch('main._file_to_import_exists')
-  @mock.patch('main._perform_big_query_load')
+  @mock.patch('main._perform_bigquery_load')
   @mock.patch('main._save_imported_filename_to_gcs')
   def test_import_storage_file_into_big_query_logs_file_import(
       self, mock_save_imported_filename, mock_perform_bq_load,
@@ -188,7 +188,7 @@ class ImportStorageFileIntoBigQueryTest(parameterized.TestCase):
                     mock_stdout.getvalue())
 
   @mock.patch('main._file_to_import_exists')
-  @mock.patch('main._perform_big_query_load')
+  @mock.patch('main._perform_bigquery_load')
   @mock.patch('main._save_imported_filename_to_gcs')
   def test_import_storage_file_into_big_query_calls_get_bucket(
       self, mock_save_imported_filename, mock_perform_bq_load,
@@ -207,7 +207,7 @@ class ImportStorageFileIntoBigQueryTest(parameterized.TestCase):
       mock_get_bucket.assert_called_with(_TEST_UPDATE_BUCKET)
 
   @mock.patch('main._file_to_import_exists')
-  @mock.patch('main._perform_big_query_load')
+  @mock.patch('main._perform_bigquery_load')
   @mock.patch('main._save_imported_filename_to_gcs')
   def test_import_storage_file_into_big_query_checks_for_eof(
       self, mock_save_imported_filename, mock_perform_bq_load,
