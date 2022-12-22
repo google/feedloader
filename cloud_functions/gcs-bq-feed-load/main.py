@@ -70,13 +70,7 @@ def import_storage_file_into_big_query(
         exceptions.NotFound('Update Bucket Environment Variable not found.'))
     return
 
-  schema_config_contents = open(_CONFIG_FILENAME).read()
-  schema_config = json.loads(schema_config_contents)
-  if not _schema_config_valid(schema_config):
-    logging.error(
-        exceptions.BadRequest(f'Schema is invalid: {schema_config_contents} .'))
-    return
-  items_table_bq_schema = _parse_schema_config(schema_config)
+  update_bucket_name = update_bucket_name.replace('gs://', '')
 
   storage_client = storage.Client()
 
@@ -86,6 +80,14 @@ def import_storage_file_into_big_query(
     logging.error(
         exceptions.NotFound(f'Bucket {update_bucket_name} could not be found.'))
     return
+
+  schema_config_contents = open(_CONFIG_FILENAME).read()
+  schema_config = json.loads(schema_config_contents)
+  if not _schema_config_valid(schema_config):
+    logging.error(
+        exceptions.BadRequest(f'Schema is invalid: {schema_config_contents} .'))
+    return
+  items_table_bq_schema = _parse_schema_config(schema_config)
 
   update_eof = eof_bucket.get_blob('EOF')
 

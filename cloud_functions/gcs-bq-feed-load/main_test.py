@@ -51,6 +51,9 @@ _TEST_COMPLETED_BUCKET = 'completed-bucket'
 _TEST_FILENAME = 'feedfile'
 _TEST_UPDATE_BUCKET = 'update-bucket'
 
+_BUCKET_NAME_PREFIX = 'gs://'
+_TEST_BUCKET_NAME = 'dummy'
+
 
 @mock.patch.dict(
     os.environ, {
@@ -104,6 +107,27 @@ class ImportStorageFileIntoBigQueryTest(parameterized.TestCase):
 
       self.assertIn('Update Bucket Environment Variable not found.',
                     mock_logging.output[0])
+
+  @mock.patch('main._file_to_import_exists')
+  @mock.patch('main._perform_bigquery_load')
+  @mock.patch('main._save_imported_filename_to_gcs')
+  def test_import_storage_file_into_big_query_updates_bucket_name(
+      self, mock_save_imported_filename, mock_perform_bq_load,
+      mock_file_to_import_exists, mock_open_file, mock_get_current_time_in_utc):
+    with mock.patch.dict(
+        os.environ,
+        {'UPDATE_BUCKET': _BUCKET_NAME_PREFIX + _TEST_BUCKET_NAME
+        }), mock.patch('main.storage.Client') as mock_storage_client:
+      # unused by this test.
+      del (mock_save_imported_filename, mock_perform_bq_load,
+           mock_file_to_import_exists, mock_open_file,
+           mock_get_current_time_in_utc)
+      mock_get_bucket = mock_storage_client.return_value.get_bucket
+      mock_get_bucket.return_value.get_blob.return_value = None
+
+      main.import_storage_file_into_big_query(self.event, self.context)
+
+      mock_get_bucket.assert_called_with(_TEST_BUCKET_NAME)
 
   def test_import_storage_file_into_big_query_reports_error_on_nonexistent_bucket(
       self, mock_open_file, mock_get_current_time_in_utc):
