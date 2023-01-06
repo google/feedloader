@@ -23,7 +23,7 @@ BQ_FEED_DATASET=feed_data
 BQ_MONITOR_DATASET=monitor_data
 CLOUD_COMPOSER_ENV_NAME=process-completion-monitor
 CLOUD_COMPOSER_ZONE=us-central1-f
-CLOUD_COMPOSER_IMAGE_VERSION=composer-1.17.8-airflow-1.10.15
+CLOUD_COMPOSER_IMAGE_VERSION=composer-2.0.28-airflow-2.3.3
 DAG_ID=completion_monitor
 EXPIRATION_TRACKING_TABLE_ID=items_expiration_tracking
 ITEM_RESULTS_TABLE_ID=item_results
@@ -381,13 +381,15 @@ then
     --location "$REGION"
 fi
 
+PROJECT_NUMBER=$(gcloud projects list --filter="PROJECT_ID=$GCP_PROJECT" --format="value(PROJECT_NUMBER)")
+gcloud projects add-iam-policy-binding "$GCP_PROJECT" \
+  --member serviceAccount:service-"${PROJECT_NUMBER}"@cloudcomposer-accounts.iam.gserviceaccount.com \
+  --role roles/composer.ServiceAgentV2Ext
+
 gcloud composer environments create "$CLOUD_COMPOSER_ENV_NAME" \
   --image-version="$CLOUD_COMPOSER_IMAGE_VERSION" \
   --airflow-configs=core-default_timezone=Asia/Tokyo \
   --location "$REGION" \
-  --zone "$CLOUD_COMPOSER_ZONE" \
-  --python-version 3 \
-  --machine-type n1-standard-1 \
   --env-variables LOCATION="$REGION",PUBSUB_TOPIC="$PUBSUB_TOPIC_MAILER"
 
 echo "Installing Python libraries in Cloud Composer..."
@@ -934,7 +936,6 @@ done
 
 # Setup Service Accounts and grant permissions
 print_green "Setting up service account permissions..."
-PROJECT_NUMBER=$(gcloud projects list --filter="PROJECT_ID=$GCP_PROJECT" --format="value(PROJECT_NUMBER)")
 gcloud projects add-iam-policy-binding "$GCP_PROJECT" \
   --member serviceAccount:"$GCP_PROJECT"@appspot.gserviceaccount.com \
   --role roles/editor
