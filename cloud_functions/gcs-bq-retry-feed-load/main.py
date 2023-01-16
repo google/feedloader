@@ -37,6 +37,16 @@ _ITEMS_TABLE_NAME = 'items'
 
 def reprocess_feed_file(event: Dict[str, Any],
                         context: 'google.cloud.functions.Context') -> None:
+  _reprocess_feed_file(event, context)
+
+
+def reprocess_feed_file_local(
+    event: Dict[str, Any], context: 'google.cloud.functions.Context') -> None:
+  _reprocess_feed_file(event, context)
+
+
+def _reprocess_feed_file(event: Dict[str, Any],
+                         context: 'google.cloud.functions.Context') -> None:
   """Cloud Function that re-uploads the provided file into BigQuery.
 
   Args:

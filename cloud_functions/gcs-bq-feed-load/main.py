@@ -37,6 +37,16 @@ _TABLE_PARTITION_GRANULARITY = 'DAY'
 
 def import_storage_file_into_big_query(
     event: Dict[str, Any], context: 'google.cloud.functions.Context') -> None:
+  _import_storage_file_into_big_query(event, context)
+
+
+def import_storage_file_into_big_query_local(
+    event: Dict[str, Any], context: 'google.cloud.functions.Context') -> None:
+  _import_storage_file_into_big_query(event, context)
+
+
+def _import_storage_file_into_big_query(
+    event: Dict[str, Any], context: 'google.cloud.functions.Context') -> None:
   """Cloud Function ("CF") triggered by a Cloud Storage ("GCS") bucket upload.
 
      This function converts the uploaded GCS file data into a BigQuery table.

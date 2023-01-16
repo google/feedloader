@@ -66,6 +66,16 @@ _SERVICE_ACCOUNT_CREDS = aiogoogle.auth.creds.ServiceAccountCreds(
 
 def calculate_product_changes(
     event: Dict[str, Any], context: 'google.cloud.functions.Context') -> None:
+  _calculate_product_changes(event, context)
+
+
+def calculate_product_changes_local(
+    event: Dict[str, Any], context: 'google.cloud.functions.Context') -> None:
+  _calculate_product_changes(event, context)
+
+
+def _calculate_product_changes(
+    event: Dict[str, Any], context: 'google.cloud.functions.Context') -> None:
   """Cloud Function ("CF") triggered by a Cloud Storage ("GCS") bucket upload.
 
      This CF calculates a diff between the last load of feeds and this one,

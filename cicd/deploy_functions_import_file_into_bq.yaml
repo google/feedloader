@@ -17,6 +17,6 @@ steps:
   entrypoint: '/bin/bash'
   args: ['-c', 'cp feed_schema_config.json cloud_functions/gcs-bq-feed-load/config.json']
 - name: 'gcr.io/cloud-builders/gcloud'
-  args: ['functions', 'deploy', 'import_storage_file_into_big_query', '--retry', '--memory', '512MB', '--timeout', '540s', '--set-env-vars', 'BQ_DATASET=${_BQ_DATASET},COMPLETED_FILES_BUCKET=${_COMPLETED_FILES_BUCKET},UPDATE_BUCKET=${_UPDATE_BUCKET},LOCK_BUCKET=${_LOCK_BUCKET}', '--trigger-resource', '${_FEED_BUCKET}', '--trigger-event', 'google.storage.object.finalize', '--runtime', 'python39']
+  args: ['functions', 'deploy', '${_CLOUD_FUNCTION_NAME}', '--retry', '--memory', '512MB', '--timeout', '540s', '--set-env-vars', 'BQ_DATASET=${_BQ_DATASET},COMPLETED_FILES_BUCKET=${_COMPLETED_FILES_BUCKET},UPDATE_BUCKET=${_UPDATE_BUCKET},LOCK_BUCKET=${_LOCK_BUCKET}', '--trigger-resource', '${_FEED_BUCKET}', '--trigger-event', 'google.storage.object.finalize', '--runtime', 'python39']
   dir: 'cloud_functions/gcs-bq-feed-load'
 timeout: 3600s

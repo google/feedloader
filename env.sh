@@ -37,3 +37,4 @@ TIMEZONE_UTC_OFFSET=[The number of hours to offset from UTC time that represents
 TRIGGER_COMPLETION_BUCKET=[Bucket name to trigger completion monitor] # e.g. trigger-completion-check
 UPDATE_BUCKET=[UPDATE BUCKET] # e.g. update
 UPSERTS_THRESHOLD=[Threshold number of items that would be upserted to alert and abort processing]
+ENABLE_LOCAL_INVENTORY_FEEDS=[Whether or not to support Local Inventory Feeds] # e.g. True

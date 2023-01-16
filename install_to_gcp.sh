@@ -36,6 +36,20 @@ PUBSUB_TOPIC_CLOUD_BUILD=cloud-build
 REGION=us-central1
 MAILER_SUBSCRIPTION=push-to-gae-mailer
 CLOUD_BUILD_SUBSCRIPTION=push-to-gae-build-reporter
+CALCULATE_PRODUCT_CHANGES_FUNCTION_NAME="calculate_product_changes"
+FEED_IMPORT_FUNCTION_NAME="import_storage_file_into_big_query"
+FEED_RETRY_FUNCTION_NAME="reprocess_feed_file"
+
+# Constants for Local Inventory Feeds
+ARCHIVE_BUCKET_LOCAL="${ARCHIVE_BUCKET}-local"
+COMPLETED_FILES_BUCKET_LOCAL="${COMPLETED_FILES_BUCKET}-local"
+FEED_BUCKET_LOCAL="${FEED_BUCKET}-local"
+LOCK_BUCKET_LOCAL="${LOCK_BUCKET}-local"
+RETRIGGER_BUCKET_LOCAL="${RETRIGGER_BUCKET}-local"
+TRIGGER_COMPLETION_BUCKET_LOCAL="${TRIGGER_COMPLETION_BUCKET}-local"
+UPDATE_BUCKET_LOCAL="${UPDATE_BUCKET}-local"
+BQ_FEED_DATASET_LOCAL="${BQ_FEED_DATASET}_local"
+DAG_ID_LOCAL="${DAG_ID}_local"
 
 if echo "$OSTYPE" | grep -q darwin
 then
@@ -130,38 +144,57 @@ done
 
 # Create Cloud Storage buckets
 print_green "Creating Cloud Storage Buckets..."
-STORAGE_BUCKETS=(
-"$ARCHIVE_BUCKET"
-"$COMPLETED_FILES_BUCKET"
-"$FEED_BUCKET"
-"$LOCK_BUCKET"
-"$MONITOR_BUCKET"
-"$RETRIGGER_BUCKET"
-"$TRIGGER_COMPLETION_BUCKET"
-"$UPDATE_BUCKET"
-)
-
-for BUCKET in "${STORAGE_BUCKETS[@]}"
-do
-  BUCKET_CREATE_RESULT=$(gsutil mb -l "$REGION" "$BUCKET" 2>&1)
-  sleep 1
-  if [[ $BUCKET_CREATE_RESULT = *"Did you mean to use a gs:// URL"* ]]
-  then
-    gsutil mb -l "$REGION" "gs://$BUCKET"
+CreateBuckets() {
+  local ARCHIVE_BUCKET=$1
+  local COMPLETED_FILES_BUCKET=$2
+  local FEED_BUCKET=$3
+  local LOCK_BUCKET=$4
+  local MONITOR_BUCKET=$5
+  local RETRIGGER_BUCKET=$6
+  local TRIGGER_COMPLETION_BUCKET=$7
+  local UPDATE_BUCKET=$8
+  local STORAGE_BUCKETS=(
+    "$ARCHIVE_BUCKET"
+    "$COMPLETED_FILES_BUCKET"
+    "$FEED_BUCKET"
+    "$LOCK_BUCKET"
+    "$MONITOR_BUCKET"
+    "$RETRIGGER_BUCKET"
+    "$TRIGGER_COMPLETION_BUCKET"
+    "$UPDATE_BUCKET"
+  )
+  for BUCKET in "${STORAGE_BUCKETS[@]}"
+  do
+    BUCKET_CREATE_RESULT=$(gsutil mb -l "$REGION" "$BUCKET" 2>&1)
     sleep 1
-  fi
-done
+    if [[ $BUCKET_CREATE_RESULT = *"Did you mean to use a gs:// URL"* ]]
+    then
+      gsutil mb -l "$REGION" "gs://$BUCKET"
+      sleep 1
+    fi
+  done
+  # Use the .json file from here for the bucket lifecycle command below
+  # (Strip gs:// if it exists and re-add it to ensure valid bucket name)
+  local ARCHIVE_BUCKET=${ARCHIVE_BUCKET/gs:\/\/}
+  local ARCHIVE_BUCKET="gs://$ARCHIVE_BUCKET"
+  gsutil lifecycle set archive_bucket_lifecycle.json "$ARCHIVE_BUCKET"
+}
 
-# Use the .json file from here for the bucket lifecycle command below
-# (Strip gs:// if it exists and re-add it to ensure valid bucket name)
-ARCHIVE_BUCKET=${ARCHIVE_BUCKET/gs:\/\/}
-ARCHIVE_BUCKET="gs://$ARCHIVE_BUCKET"
-gsutil lifecycle set archive_bucket_lifecycle.json "$ARCHIVE_BUCKET"
+CreateBuckets "$ARCHIVE_BUCKET" "$COMPLETED_FILES_BUCKET" "$FEED_BUCKET" \
+              "$LOCK_BUCKET" "$MONITOR_BUCKET" "$RETRIGGER_BUCKET" \
+              "$TRIGGER_COMPLETION_BUCKET" "$UPDATE_BUCKET"
+if echo "$ENABLE_LOCAL_INVENTORY_FEEDS"
+then
+  CreateBuckets "$ARCHIVE_BUCKET_LOCAL" "$COMPLETED_FILES_BUCKET_LOCAL" \
+                "$FEED_BUCKET_LOCAL" "$LOCK_BUCKET_LOCAL" \
+                "$MONITOR_BUCKET_LOCAL" "$RETRIGGER_BUCKET_LOCAL" \
+                "$TRIGGER_COMPLETION_BUCKET_LOCAL" "$UPDATE_BUCKET_LOCAL"
+fi
 
 # Create service accounts
 print_green "Creating service accounts and clearing their keys..."
 DeleteAllServiceAccountKeys() {
-  SERVICE_ACCOUNT_EMAIL=$1
+  local SERVICE_ACCOUNT_EMAIL=$1
   for KEY in $(gcloud alpha iam service-accounts keys list --iam-account="$SERVICE_ACCOUNT_EMAIL" --managed-by="user" | awk '{if(NR>1)print}' | awk '{print $1;}')
   do
     gcloud alpha iam service-accounts keys -q delete "$KEY" --iam-account="$SERVICE_ACCOUNT_EMAIL"
@@ -1009,9 +1042,9 @@ fi
 
 print_green "Deleting and re-creating Cloud Build triggers..."
 CreateTrigger() {
-  TARGET_TRIGGER=$1
-  DESCRIPTION=$2
-  ENV_VARIABLES=$3
+  local TARGET_TRIGGER=$1
+  local DESCRIPTION=$2
+  local ENV_VARIABLES=$3
   gcloud alpha builds triggers create cloud-source-repositories \
   --build-config=cicd/"$TARGET_TRIGGER" \
   --repo="$SOURCE_REPO" \
@@ -1029,13 +1062,13 @@ do
 done
 CreateTrigger deploy_functions_calculate_product_changes.yaml \
   "FeedLoader Deploy Calculate Product Change Function" \
-  _GCP_PROJECT="$GCP_PROJECT"::_TIMEZONE_UTC_OFFSET="$TIMEZONE_UTC_OFFSET"::_EXPIRATION_THRESHOLD="$EXPIRATION_THRESHOLD"::_BQ_DATASET="$BQ_FEED_DATASET"::_DELETES_THRESHOLD="$DELETES_THRESHOLD"::_UPSERTS_THRESHOLD="$UPSERTS_THRESHOLD"::_UPDATE_BUCKET="$UPDATE_BUCKET"::_RETRIGGER_BUCKET="$RETRIGGER_BUCKET"::_FEED_BUCKET="$FEED_BUCKET"::_ARCHIVE_BUCKET="$ARCHIVE_BUCKET"::_COMPLETED_FILES_BUCKET="$COMPLETED_FILES_BUCKET"::_LOCK_BUCKET="$LOCK_BUCKET"
+  _CLOUD_FUNCTION_NAME="$CALCULATE_PRODUCT_CHANGES_FUNCTION_NAME"::_GCP_PROJECT="$GCP_PROJECT"::_TIMEZONE_UTC_OFFSET="$TIMEZONE_UTC_OFFSET"::_EXPIRATION_THRESHOLD="$EXPIRATION_THRESHOLD"::_BQ_DATASET="$BQ_FEED_DATASET"::_DELETES_THRESHOLD="$DELETES_THRESHOLD"::_UPSERTS_THRESHOLD="$UPSERTS_THRESHOLD"::_UPDATE_BUCKET="$UPDATE_BUCKET"::_RETRIGGER_BUCKET="$RETRIGGER_BUCKET"::_FEED_BUCKET="$FEED_BUCKET"::_ARCHIVE_BUCKET="$ARCHIVE_BUCKET"::_COMPLETED_FILES_BUCKET="$COMPLETED_FILES_BUCKET"::_LOCK_BUCKET="$LOCK_BUCKET"
 CreateTrigger deploy_functions_import_file_into_bq.yaml \
   "FeedLoader Deploy Feed Import Function" \
-  _BQ_DATASET="$BQ_FEED_DATASET"::_COMPLETED_FILES_BUCKET="$COMPLETED_FILES_BUCKET"::_FEED_BUCKET="$FEED_BUCKET"::_UPDATE_BUCKET="$UPDATE_BUCKET"::_LOCK_BUCKET="$LOCK_BUCKET"
+  _CLOUD_FUNCTION_NAME="$FEED_IMPORT_FUNCTION_NAME"::_BQ_DATASET="$BQ_FEED_DATASET"::_COMPLETED_FILES_BUCKET="$COMPLETED_FILES_BUCKET"::_FEED_BUCKET="$FEED_BUCKET"::_UPDATE_BUCKET="$UPDATE_BUCKET"::_LOCK_BUCKET="$LOCK_BUCKET"
 CreateTrigger deploy_functions_retry_feed_import.yaml \
   "FeedLoader Deploy Feed File Retry Function" \
-  _BQ_DATASET="$BQ_FEED_DATASET"::_FEED_BUCKET="$FEED_BUCKET"::_UPDATE_BUCKET="$UPDATE_BUCKET"::_COMPLETED_FILES_BUCKET="$COMPLETED_FILES_BUCKET"::_RETRIGGER_BUCKET="$RETRIGGER_BUCKET"
+  _CLOUD_FUNCTION_NAME="$FEED_RETRY_FUNCTION_NAME"::_BQ_DATASET="$BQ_FEED_DATASET"::_FEED_BUCKET="$FEED_BUCKET"::_UPDATE_BUCKET="$UPDATE_BUCKET"::_COMPLETED_FILES_BUCKET="$COMPLETED_FILES_BUCKET"::_RETRIGGER_BUCKET="$RETRIGGER_BUCKET"
 CreateTrigger deploy_functions_trigger_dag.yaml \
   "FeedLoader Deploy Trigger DAG Function" \
   _GCP_PROJECT="$GCP_PROJECT"::_AIRFLOW_WEBSERVER_ID="$AIRFLOW_WEBSERVER_ID"::_DAG_ID="$DAG_ID"::_TRIGGER_COMPLETION_BUCKET="$TRIGGER_COMPLETION_BUCKET"::_REGION="$REGION"::_CLOUD_COMPOSER_ENV_NAME="$CLOUD_COMPOSER_ENV_NAME"
@@ -1045,6 +1078,19 @@ CreateTrigger deploy_monitor.yaml \
 CreateTrigger deploy_gae.yaml \
   "FeedLoader Deploy AppEngine Services" \
   _KEYRING="$KEYRING"::_KEYNAME="$KEYNAME"::_GCP_PROJECT="$GCP_PROJECT"::_REGION="$REGION"::_TRIGGER_COMPLETION_BUCKET="$TRIGGER_COMPLETION_BUCKET"::_LOCK_BUCKET="$LOCK_BUCKET"::_CLOUD_BUILD_SUBSCRIPTION="$CLOUD_BUILD_SUBSCRIPTION"::_BUILD_NOTIFICATION_EMAILS="$BUILD_NOTIFICATION_EMAILS"::_MERCHANT_ID="$MERCHANT_ID"::_IS_MCA="$IS_MCA"::_USE_LOCAL_INVENTORY_ADS="$USE_LOCAL_INVENTORY_ADS"::_SHOPTIMIZER_URL="$SHOPTIMIZER_URL"::_SHOPTIMIZER_API_INTEGRATION_ON="$SHOPTIMIZER_API_INTEGRATION_ON"::_PUBSUB_TOKEN="$PUBSUB_TOKEN"::_FINISH_EMAILS="$FINISH_EMAILS"
+if echo "$ENABLE_LOCAL_INVENTORY_FEEDS"
+then
+  print_green "Creating Cloud Build triggers for local..."
+  CreateTrigger deploy_functions_calculate_product_changes.yaml \
+    "FeedLoader Deploy Calculate Product Change Function" \
+    _CLOUD_FUNCTION_NAME="${CALCULATE_PRODUCT_CHANGES_FUNCTION_NAME}_local"::_GCP_PROJECT="$GCP_PROJECT"::_TIMEZONE_UTC_OFFSET="$TIMEZONE_UTC_OFFSET"::_EXPIRATION_THRESHOLD="$EXPIRATION_THRESHOLD"::_BQ_DATASET="$BQ_FEED_DATASET_LOCAL"::_DELETES_THRESHOLD="$DELETES_THRESHOLD"::_UPSERTS_THRESHOLD="$UPSERTS_THRESHOLD"::_UPDATE_BUCKET="$UPDATE_BUCKET_LOCAL"::_RETRIGGER_BUCKET="$RETRIGGER_BUCKET_LOCAL"::_FEED_BUCKET="$FEED_BUCKET_LOCAL"::_ARCHIVE_BUCKET="$ARCHIVE_BUCKET_LOCAL"::_COMPLETED_FILES_BUCKET="$COMPLETED_FILES_BUCKET_LOCAL"::_LOCK_BUCKET="$LOCK_BUCKET_LOCAL"
+  CreateTrigger deploy_functions_import_file_into_bq.yaml \
+    "FeedLoader Deploy Feed Import Function" \
+    _CLOUD_FUNCTION_NAME="${FEED_IMPORT_FUNCTION_NAME}_local"::_BQ_DATASET="$BQ_FEED_DATASET_LOCAL"::_COMPLETED_FILES_BUCKET="$COMPLETED_FILES_BUCKET_LOCAL"::_FEED_BUCKET="$FEED_BUCKET_LOCAL"::_UPDATE_BUCKET="$UPDATE_BUCKET_LOCAL"::_LOCK_BUCKET="$LOCK_BUCKET_LOCAL"
+  CreateTrigger deploy_functions_retry_feed_import.yaml \
+    "FeedLoader Deploy Feed File Retry Function" \
+    _CLOUD_FUNCTION_NAME="${FEED_RETRY_FUNCTION_NAME}_local"::_BQ_DATASET="$BQ_FEED_DATASET_LOCAL"::_FEED_BUCKET="$FEED_BUCKET_LOCAL"::_UPDATE_BUCKET="$UPDATE_BUCKET_LOCAL"::_COMPLETED_FILES_BUCKET="$COMPLETED_FILES_BUCKET_LOCAL"::_RETRIGGER_BUCKET="$RETRIGGER_BUCKET_LOCAL"
+fi
 
 # Encrypt Keys
 print_green "Generating encrypted versions of the service accounts so that Cloud Build can deploy stuff securely..."
