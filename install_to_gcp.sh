@@ -49,6 +49,7 @@ RETRIGGER_BUCKET_LOCAL="${RETRIGGER_BUCKET}-local"
 TRIGGER_COMPLETION_BUCKET_LOCAL="${TRIGGER_COMPLETION_BUCKET}-local"
 UPDATE_BUCKET_LOCAL="${UPDATE_BUCKET}-local"
 BQ_FEED_DATASET_LOCAL="${BQ_FEED_DATASET}_local"
+BQ_MONITOR_DATASET_LOCAL="${BQ_MONITOR_DATASET}_local"
 DAG_ID_LOCAL="${DAG_ID}_local"
 
 if echo "$OSTYPE" | grep -q darwin
@@ -229,84 +230,96 @@ DeleteAllServiceAccountKeys "$MC_SERVICE_ACCOUNT"
 
 # Create BigQuery datasets and tables
 print_green "Creating BigQuery datasets and tables..."
-if bq ls --all | grep -q -w "$BQ_FEED_DATASET"
+
+CreateBQTables() {
+  local BQ_FEED_DATASET=$1
+  local BQ_MONITOR_DATASET=$2
+  if bq ls --all | grep -q -w "$BQ_FEED_DATASET"
+  then
+    echo "$BQ_FEED_DATASET already exists."
+  else
+    bq --location=US mk -d "$BQ_FEED_DATASET"
+  fi
+
+  bq rm -f "$BQ_FEED_DATASET".streaming_items
+  bq mk -t \
+    --schema 'item_id:STRING,google_merchant_id:STRING,hashed_content:STRING,import_datetime:DATETIME' \
+    "$BQ_FEED_DATASET".streaming_items
+
+  bq rm -f "$BQ_FEED_DATASET".items_to_delete
+  bq mk -t --schema 'item_id:STRING,google_merchant_id:STRING' "$BQ_FEED_DATASET".items_to_delete
+
+  bq rm -f "$BQ_FEED_DATASET".items_to_upsert
+  bq mk -t --schema 'item_id:STRING' "$BQ_FEED_DATASET".items_to_upsert
+
+  bq rm -f "$BQ_FEED_DATASET".items_expiration_tracking
+  bq mk -t \
+    --schema 'item_id:STRING,last_touched_date:DATE' \
+    "$BQ_FEED_DATASET".items_expiration_tracking
+
+  bq rm -f "$BQ_FEED_DATASET".items_to_prevent_expiring
+  bq mk -t \
+    --schema 'item_id:STRING' \
+    "$BQ_FEED_DATASET".items_to_prevent_expiring
+
+  if bq ls --all | grep -q -w "$BQ_MONITOR_DATASET"
+  then
+    echo "$BQ_MONITOR_DATASET already exists."
+  else
+    bq --location US mk -d "$BQ_MONITOR_DATASET"
+  fi
+
+  bq rm -f "$BQ_MONITOR_DATASET"."$PROCESS_RESULT_TABLE_ID"
+  bq mk -t "$BQ_MONITOR_DATASET"."$PROCESS_RESULT_TABLE_ID" \
+    channel:STRING,operation:STRING,timestamp:STRING,batch_id:INTEGER,success_count:INTEGER,failure_count:INTEGER,skipped_count:INTEGER
+
+  bq rm -f "$BQ_MONITOR_DATASET"."$ITEM_RESULTS_TABLE_ID"
+  bq mk -t "$BQ_MONITOR_DATASET"."$ITEM_RESULTS_TABLE_ID" \
+    item_id:STRING,batch_id:INTEGER,channel:STRING,operation:STRING,result:STRING,error:STRING,timestamp:STRING
+
+  print_green "Creating scheduled Queries..."
+
+  # Remove any pre-existing scheduled queries from the Cloud project
+  EXISTING_SCHEDULED_QUERIES=$(bq ls --transfer_config --transfer_location=us --project_id="$GCP_PROJECT" | grep projects | awk '{print $1}')
+
+  for SCHEDULED_QUERY in $(echo "$EXISTING_SCHEDULED_QUERIES")
+  do
+    bq rm -f --transfer_config "$SCHEDULED_QUERY"
+    sleep 1
+  done
+
+  # Schedule a query to cleanup the streaming_items table periodically
+  bq query \
+      --use_legacy_sql=false \
+      --destination_table="$BQ_FEED_DATASET".streaming_items \
+      --display_name='Cleanup streaming_items older than 30 days' \
+      --schedule='every 730 hours' \
+      --replace=true \
+      "SELECT
+        *
+      FROM
+        $BQ_FEED_DATASET.streaming_items
+      WHERE import_datetime > DATETIME_SUB(CURRENT_DATETIME(), INTERVAL 30 DAY)"
+
+  # Schedule a query to cleanup the item_results table periodically
+  bq query \
+      --use_legacy_sql=false \
+      --destination_table="$BQ_MONITOR_DATASET".item_results \
+      --display_name='Cleanup item_results older than 30 days' \
+      --schedule='every 730 hours' \
+      --replace=true \
+      "SELECT
+        *
+      FROM
+        $BQ_MONITOR_DATASET.item_results
+      WHERE timestamp > FORMAT_DATETIME(\"%Y%m%d\", DATETIME_SUB(CURRENT_DATETIME(), INTERVAL 30 DAY))"
+}
+
+CreateBQTables "$BQ_FEED_DATASET" "$BQ_MONITOR_DATASET"
+if echo "$ENABLE_LOCAL_INVENTORY_FEEDS"
 then
-  echo "$BQ_FEED_DATASET already exists."
-else
-  bq --location=US mk -d "$BQ_FEED_DATASET"
+  CreateBQTables "$BQ_FEED_DATASET_LOCAL" "$BQ_MONITOR_DATASET_LOCAL"
 fi
-
-bq rm -f "$BQ_FEED_DATASET".streaming_items
-bq mk -t \
-  --schema 'item_id:STRING,google_merchant_id:STRING,hashed_content:STRING,import_datetime:DATETIME' \
-  "$BQ_FEED_DATASET".streaming_items
-
-bq rm -f "$BQ_FEED_DATASET".items_to_delete
-bq mk -t --schema 'item_id:STRING,google_merchant_id:STRING' "$BQ_FEED_DATASET".items_to_delete
-
-bq rm -f "$BQ_FEED_DATASET".items_to_upsert
-bq mk -t --schema 'item_id:STRING' "$BQ_FEED_DATASET".items_to_upsert
-
-bq rm -f "$BQ_FEED_DATASET".items_expiration_tracking
-bq mk -t \
-  --schema 'item_id:STRING,last_touched_date:DATE' \
-  "$BQ_FEED_DATASET".items_expiration_tracking
-
-bq rm -f "$BQ_FEED_DATASET".items_to_prevent_expiring
-bq mk -t \
-  --schema 'item_id:STRING' \
-  "$BQ_FEED_DATASET".items_to_prevent_expiring
-
-if bq ls --all | grep -q -w "$BQ_MONITOR_DATASET"
-then
-  echo "$BQ_MONITOR_DATASET already exists."
-else
-  bq --location US mk -d "$BQ_MONITOR_DATASET"
-fi
-
-bq rm -f "$BQ_MONITOR_DATASET"."$PROCESS_RESULT_TABLE_ID"
-bq mk -t "$BQ_MONITOR_DATASET"."$PROCESS_RESULT_TABLE_ID" \
-  channel:STRING,operation:STRING,timestamp:STRING,batch_id:INTEGER,success_count:INTEGER,failure_count:INTEGER,skipped_count:INTEGER
-
-bq rm -f "$BQ_MONITOR_DATASET"."$ITEM_RESULTS_TABLE_ID"
-bq mk -t "$BQ_MONITOR_DATASET"."$ITEM_RESULTS_TABLE_ID" \
-  item_id:STRING,batch_id:INTEGER,channel:STRING,operation:STRING,result:STRING,error:STRING,timestamp:STRING
-
-print_green "Creating scheduled Queries..."
-# Remove any pre-existing scheduled queries from the Cloud project
-EXISTING_SCHEDULED_QUERIES=$(bq ls --transfer_config --transfer_location=us --project_id="$GCP_PROJECT" | grep projects | awk '{print $1}')
-
-for SCHEDULED_QUERY in $(echo "$EXISTING_SCHEDULED_QUERIES")
-do
-  bq rm -f --transfer_config "$SCHEDULED_QUERY"
-  sleep 1
-done
-
-# Schedule a query to cleanup the streaming_items table periodically
-bq query \
-    --use_legacy_sql=false \
-    --destination_table="$BQ_FEED_DATASET".streaming_items \
-    --display_name='Cleanup streaming_items older than 30 days' \
-    --schedule='every 730 hours' \
-    --replace=true \
-    "SELECT
-      *
-    FROM
-      $BQ_FEED_DATASET.streaming_items
-    WHERE import_datetime > DATETIME_SUB(CURRENT_DATETIME(), INTERVAL 30 DAY)"
-
-# Schedule a query to cleanup the item_results table periodically
-bq query \
-    --use_legacy_sql=false \
-    --destination_table="$BQ_MONITOR_DATASET".item_results \
-    --display_name='Cleanup item_results older than 30 days' \
-    --schedule='every 730 hours' \
-    --replace=true \
-    "SELECT
-      *
-    FROM
-      $BQ_MONITOR_DATASET.item_results
-    WHERE timestamp > FORMAT_DATETIME(\"%Y%m%d\", DATETIME_SUB(CURRENT_DATETIME(), INTERVAL 30 DAY))"
 
 # Create Cloud Pub/Sub topics
 print_green "Creating PubSub topics and subscriptions..."
