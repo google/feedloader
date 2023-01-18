@@ -1126,4 +1126,4 @@ do
   sleep 1
 done
 
-print_green "Installation and setup finished. Please deploy via Cloud Build either manually or by pushing to your source repository at ${HYPERLINK}https://source.cloud.google.com/{$GCP_PROJECT}/{$SOURCE_REPO}\ahttps://source.cloud.google.com/{$GCP_PROJECT}/{$SOURCE_REPO}${HYPERLINK}\a"
+print_green "Installation and setup finished. Please deploy via Cloud Build either manually or by pushing to your source repository at ${HYPERLINK}https://source.cloud.google.com/$GCP_PROJECT/$SOURCE_REPO\ahttps://source.cloud.google.com/$GCP_PROJECT/$SOURCE_REPO${HYPERLINK}\a"
