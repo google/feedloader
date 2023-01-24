@@ -1,0 +1,13 @@
+{
+  "mapping": [
+  {"csvHeader": "store_code", "bqColumn": "store_code", "columnType": "STRING"},
+  {"csvHeader": "id", "bqColumn": "item_id", "columnType": "STRING"},
+  {"csvHeader": "price", "bqColumn": "price", "columnType": "INTEGER"},
+  {"csvHeader": "quantity", "bqColumn": "quantity", "columnType": "INTEGER"},
+  {"csvHeader": "availability", "bqColumn": "availability", "columnType": "STRING"},
+  {"csvHeader": "pickup_method", "bqColumn": "pickup_method", "columnType": "STRING"},
+  {"csvHeader": "pickup_sla", "bqColumn": "pickup_sla", "columnType": "STRING"},
+  {"csvHeader": "sale_price", "bqColumn": "sale_price", "columnType": "INTEGER"},
+  {"csvHeader": "sale_price_effective_date", "bqColumn": "sale_price_effective_date", "columnType": "STRING"}
+  ]
+}
