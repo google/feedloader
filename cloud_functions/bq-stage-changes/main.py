@@ -37,11 +37,11 @@ _BUCKET_DELIMITER = '/'
 _COMPLETED_FILES_BUCKET = ''
 _DEFAULT_DELETES_THRESHOLD = 100000
 _DELETES_TABLE_NAME = 'items_to_delete'
-_EXPIRATION_TABLE_NAME = 'items_to_prevent_expiring'
 _GAE_ACTIONS = enum.Enum('GAE_ACTIONS', 'upsert delete prevent_expiring')
 _ITEMS_TABLE_EXPIRATION_DURATION = 43200000  # 12 hours.
 _ITEMS_TABLE_NAME = 'items'
 _ITEMS_TO_DELETE_TABLE_NAME = 'items_to_delete'
+_ITEMS_TO_TRACK_EXPIRATION_TABLE_NAME = 'items_expiration_tracking'
 _ITEMS_TO_PREVENT_EXPIRING_TABLE_NAME = 'items_to_prevent_expiring'
 _ITEMS_TO_UPSERT_TABLE_NAME = 'items_to_upsert'
 _STREAMING_ITEMS_TABLE_NAME = 'streaming_items'
@@ -99,6 +99,8 @@ def _calculate_product_changes(
   """
   del context
 
+  local_inventory_feed_enabled = True if 'local' in event['bucket'] else False
+
   (bq_dataset, deletes_threshold, expiration_threshold, feed_bucket,
    gcp_project, lock_bucket, retrigger_bucket, timezone_utc_offset,
    upserts_threshold) = _load_environment_variables()
@@ -113,6 +115,8 @@ def _calculate_product_changes(
       f'{gcp_project}.{bq_dataset}.{_ITEMS_TABLE_NAME}')
   fully_qualified_items_to_delete_table_name = (
       f'{gcp_project}.{bq_dataset}.{_ITEMS_TO_DELETE_TABLE_NAME}')
+  fully_qualified_items_to_track_expiration_table_name = (
+      f'{gcp_project}.{bq_dataset}.{_ITEMS_TO_TRACK_EXPIRATION_TABLE_NAME}')
   fully_qualified_items_to_prevent_expiring_table_name = (
       f'{gcp_project}.{bq_dataset}.{_ITEMS_TO_PREVENT_EXPIRING_TABLE_NAME}')
   fully_qualified_items_to_upsert_table_name = (
@@ -163,13 +167,16 @@ def _calculate_product_changes(
                 fully_qualified_items_table_name)
       return
 
-  print(
-      'Completed files cleanup finished. Setting expiration on items table...')
+  print('Completed files cleanup finished.')
 
-  _set_table_expiration_date(bigquery_client, fully_qualified_items_table_name,
-                             _ITEMS_TABLE_EXPIRATION_DURATION)
+  if not local_inventory_feed_enabled:
+    print('Setting expiration on items table...')
+    _set_table_expiration_date(bigquery_client,
+                               fully_qualified_items_table_name,
+                               _ITEMS_TABLE_EXPIRATION_DURATION)
+    print('Expiration set on items table.')
 
-  print('Expiration set on items table. Proceeding to archive feed files...')
+  print('Proceeding to archive feed files...')
 
   try:
     _archive_folder(storage_client, feed_bucket)
@@ -190,10 +197,12 @@ def _calculate_product_changes(
   table_list = [
       fully_qualified_items_table_name,
       fully_qualified_items_to_delete_table_name,
-      fully_qualified_items_to_prevent_expiring_table_name,
       fully_qualified_items_to_upsert_table_name,
       fully_qualified_streaming_items_table_name
   ]
+  if not local_inventory_feed_enabled:
+    table_list += [fully_qualified_items_to_track_expiration_table_name,
+                   fully_qualified_items_to_prevent_expiring_table_name]
   if not all(_table_exists(bigquery_client, table) for table in table_list):
     logging.error(
         RuntimeError(
@@ -303,17 +312,19 @@ def _calculate_product_changes(
       timezone_utc_offset=timezone_utc_offset,
       expiration_threshold=expiration_threshold)
 
-  try:
-    # Populate the items to prevent expiring table with items that have not been
-    # touched in EXPIRATION_THRESHOLD days.
-    _run_materialize_job(bigquery_client, bq_dataset, _EXPIRATION_TABLE_NAME,
-                         gcp_project, calculate_expirations_query,
-                         _WRITE_DISPOSITION.WRITE_TRUNCATE.name)
-  except Exception as expirations_calculation_error:  
-    logging.error(str(expirations_calculation_error))
-    _clean_up(storage_client, bigquery_client, lock_bucket,
-              fully_qualified_items_table_name)
-    return
+  if not local_inventory_feed_enabled:
+    try:
+      # Populate the items to prevent expiring table with items that have not
+      # been touched in EXPIRATION_THRESHOLD days.
+      _run_materialize_job(bigquery_client, bq_dataset,
+                           _ITEMS_TO_PREVENT_EXPIRING_TABLE_NAME,
+                           gcp_project, calculate_expirations_query,
+                           _WRITE_DISPOSITION.WRITE_TRUNCATE.name)
+    except Exception as expirations_calculation_error:  
+      logging.error(str(expirations_calculation_error))
+      _clean_up(storage_client, bigquery_client, lock_bucket,
+                fully_qualified_items_table_name)
+      return
 
   count_deletes_query_template = (string.Template(queries.COUNT_DELETES_QUERY))
   count_deletes_query = (
@@ -339,16 +350,19 @@ def _calculate_product_changes(
     # items can be upserted in the future.
     _run_dml_job(bigquery_client, delete_latest_streaming_items_query)
 
-  count_expiring_query_template = (
-      string.Template(queries.COUNT_EXPIRING_QUERY))
-  count_expiring_query = (
-      count_expiring_query_template.substitute(bq_dataset=bq_dataset))
-  expiring_count = _count_changes(bigquery_client, count_expiring_query,
-                                  _GAE_ACTIONS.prevent_expiring.name)
-  if expiring_count < 0:
-    # Zero-out the expiring count so that processing can continue without doing
-    # any expiration operations for expiration prevention purposes.
+  if local_inventory_feed_enabled:
     expiring_count = 0
+  else:
+    count_expiring_query_template = (
+        string.Template(queries.COUNT_EXPIRING_QUERY))
+    count_expiring_query = (
+        count_expiring_query_template.substitute(bq_dataset=bq_dataset))
+    expiring_count = _count_changes(bigquery_client, count_expiring_query,
+                                    _GAE_ACTIONS.prevent_expiring.name)
+    if expiring_count < 0:
+      # Zero-out the expiring count so that processing can continue without
+      # doing any expiration operations for expiration prevention purposes.
+      expiring_count = 0
 
   if delete_count > deletes_threshold:
     logging.error(
