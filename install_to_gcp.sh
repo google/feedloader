@@ -254,15 +254,17 @@ CreateBQTables() {
   bq rm -f "$BQ_FEED_DATASET".items_to_upsert
   bq mk -t --schema 'item_id:STRING' "$BQ_FEED_DATASET".items_to_upsert
 
-  bq rm -f "$BQ_FEED_DATASET".items_expiration_tracking
-  bq mk -t \
-    --schema 'item_id:STRING,last_touched_date:DATE' \
-    "$BQ_FEED_DATASET".items_expiration_tracking
+  if ! [[ "$ENABLE_LOCAL_INVENTORY_FEEDS" -eq "True" ]]; then
+    bq rm -f "$BQ_FEED_DATASET".items_expiration_tracking
+    bq mk -t \
+      --schema 'item_id:STRING,last_touched_date:DATE' \
+      "$BQ_FEED_DATASET".items_expiration_tracking
 
-  bq rm -f "$BQ_FEED_DATASET".items_to_prevent_expiring
-  bq mk -t \
-    --schema 'item_id:STRING' \
-    "$BQ_FEED_DATASET".items_to_prevent_expiring
+    bq rm -f "$BQ_FEED_DATASET".items_to_prevent_expiring
+    bq mk -t \
+      --schema 'item_id:STRING' \
+      "$BQ_FEED_DATASET".items_to_prevent_expiring
+  fi
 
   if bq ls --all | grep -q -w "$BQ_MONITOR_DATASET"
   then
