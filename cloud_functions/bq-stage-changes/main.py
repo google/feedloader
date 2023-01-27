@@ -36,7 +36,6 @@ import queries
 _BUCKET_DELIMITER = '/'
 _COMPLETED_FILES_BUCKET = ''
 _DEFAULT_DELETES_THRESHOLD = 100000
-_DELETES_TABLE_NAME = 'items_to_delete'
 _GAE_ACTIONS = enum.Enum('GAE_ACTIONS', 'upsert delete prevent_expiring')
 _ITEMS_TABLE_EXPIRATION_DURATION = 43200000  # 12 hours.
 _ITEMS_TABLE_NAME = 'items'
@@ -47,10 +46,8 @@ _ITEMS_TO_UPSERT_TABLE_NAME = 'items_to_upsert'
 _STREAMING_ITEMS_TABLE_NAME = 'streaming_items'
 _LOCK_FILE_NAME = 'EOF.lock'
 _MERCHANT_ID_COLUMN = 'google_merchant_id'
-_STREAMING_ITEMS_TABLE_NAME = 'streaming_items'
 _TASK_QUEUE_LOCATION = 'us-central1'
 _TASK_QUEUE_NAME = 'trigger-initiator'
-_UPSERTS_TABLE_NAME = 'items_to_upsert'
 _WRITE_DISPOSITION = enum.Enum('WRITE_DISPOSITION',
                                'WRITE_TRUNCATE WRITE_APPEND WRITE_EMPTY')
 
@@ -262,8 +259,9 @@ def _calculate_product_changes(
 
   try:
     # Find out how many items need to be deleted, if any.
-    _run_materialize_job(bigquery_client, bq_dataset, _DELETES_TABLE_NAME,
-                         gcp_project, calculate_deletions_query,
+    _run_materialize_job(bigquery_client, bq_dataset,
+                         _ITEMS_TO_DELETE_TABLE_NAME, gcp_project,
+                         calculate_deletions_query,
                          _WRITE_DISPOSITION.WRITE_TRUNCATE.name)
   except Exception as deletions_calculation_error:  
     logging.error(str(deletions_calculation_error))
@@ -279,8 +277,9 @@ def _calculate_product_changes(
   try:
     # Start the "upserts" calculation. This is done with two separate queries,
     # one for updates, one for inserts.
-    _run_materialize_job(bigquery_client, bq_dataset, _UPSERTS_TABLE_NAME,
-                         gcp_project, calculate_updates_query,
+    _run_materialize_job(bigquery_client, bq_dataset,
+                         _ITEMS_TO_UPSERT_TABLE_NAME, gcp_project,
+                         calculate_updates_query,
                          _WRITE_DISPOSITION.WRITE_TRUNCATE.name)
   except Exception as updates_calculation_error:  
     logging.error(str(updates_calculation_error))
@@ -296,8 +295,9 @@ def _calculate_product_changes(
   try:
     # Newly inserted items cannot rely on hashes used by calculate_updates_query
     # to detect them, so append these results to the upserts table, too.
-    _run_materialize_job(bigquery_client, bq_dataset, _UPSERTS_TABLE_NAME,
-                         gcp_project, calculate_inserts_query,
+    _run_materialize_job(bigquery_client, bq_dataset,
+                         _ITEMS_TO_UPSERT_TABLE_NAME, gcp_project,
+                         calculate_inserts_query,
                          _WRITE_DISPOSITION.WRITE_APPEND.name)
   except Exception as inserts_calculation_error:  
     logging.error(str(inserts_calculation_error))
