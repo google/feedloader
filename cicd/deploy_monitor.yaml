@@ -40,5 +40,5 @@ steps:
 - name: 'gcr.io/cloud-builders/gcloud'
   args: ['composer', 'environments', 'storage', 'data', 'import', '--environment', '${_CLOUD_COMPOSER_ENV_NAME}', '--location', '${_REGION}', '--source', 'composer/completion_monitor/config']
 - name: 'gcr.io/cloud-builders/gcloud'
-  args: ['composer', 'environments', 'run', '${_CLOUD_COMPOSER_ENV_NAME}', '--location', '${_REGION}', 'variables', '--', '--i', '/home/airflow/gcs/data/config/variables.json']
+  args: ['composer', 'environments', 'run', '${_CLOUD_COMPOSER_ENV_NAME}', '--location', '${_REGION}', 'variables', '--', 'import', '/home/airflow/gcs/data/config/variables.json']
 timeout: 3600s
