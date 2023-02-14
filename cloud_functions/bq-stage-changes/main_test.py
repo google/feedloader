@@ -31,22 +31,22 @@ import pytest
 _TEST_BQ_DATASET = 'dataset'
 _TEST_COMPLETED_FILES_PROCESSED = 150
 _TEST_COMPLETED_FILES_BUCKET = 'completed-bucket'
-_TEST_DELETES_TABLE_NAME = main._DELETES_TABLE_NAME
 _TEST_DELETES_THRESHOLD = '100000'
 _TEST_EOF_BUCKET = 'update-bucket'
-_TEST_EXPIRATIONS_TABLE_NAME = main._EXPIRATION_TABLE_NAME
 _TEST_EXPIRATION_THRESHOLD = '25'
 _TEST_FEED_BUCKET = 'feed-bucket'
 _TEST_FILENAME = 'EOF'
 _TEST_GAE_ACTIONS = main._GAE_ACTIONS
 _TEST_GCP_PROJECT_ID = 'test-project'
 _TEST_ITEMS_TABLE = main._ITEMS_TABLE_NAME
+_TEST_ITEMS_TABLE_EXPIRATION_DURATION = main._ITEMS_TABLE_EXPIRATION_DURATION
 _TEST_ITEMS_TO_DELETE_TABLE = main._ITEMS_TO_DELETE_TABLE_NAME
 _TEST_ITEMS_TO_PREVENT_EXPIRING_TABLE = (
     main._ITEMS_TO_PREVENT_EXPIRING_TABLE_NAME)
-_TEST_ITEMS_TO_UPSERT_TABLE = main._ITEMS_TO_UPSERT_TABLE_NAME
-_TEST_STREAMING_ITEMS_TABLE = main._STREAMING_ITEMS_TABLE_NAME
-_TEST_ITEMS_TABLE_EXPIRATION_DURATION = main._ITEMS_TABLE_EXPIRATION_DURATION
+_TEST_ITEMS_TO_TRACK_EXPIRATION_TABLE_NAME = (
+    main._ITEMS_TO_TRACK_EXPIRATION_TABLE_NAME
+)
+_TEST_ITEMS_TO_UPSERT_TABLE_NAME = main._ITEMS_TO_UPSERT_TABLE_NAME
 _TEST_LOCK_BUCKET = 'lock-bucket'
 _TEST_LOCK_FILE_NAME = main._LOCK_FILE_NAME
 _TEST_MERCHANT_ID_SQL = f'{main._MERCHANT_ID_COLUMN},'
@@ -57,7 +57,6 @@ _TEST_TASK_QUEUE_LOCATION = main._TASK_QUEUE_LOCATION
 _TEST_TASK_QUEUE_NAME = main._TASK_QUEUE_NAME
 _TEST_TIMESTAMP = '2021-06-05T08:16:25.183Z'
 _TEST_TIMEZONE_UTC_OFFSET = '+09:00'
-_TEST_UPSERTS_TABLE_NAME = main._UPSERTS_TABLE_NAME
 _TEST_UPSERTS_THRESHOLD = '100000'
 _TEST_WRITE_DISPOSITION = main._WRITE_DISPOSITION
 _TEST_FULLY_QUALIFIED_ITEMS_TABLE = (
@@ -184,26 +183,36 @@ class CalculateProductChangesTest(parameterized.TestCase):
       fully_qualified_items_to_delete_table_name = (
           f'{_TEST_GCP_PROJECT_ID}.{_TEST_BQ_DATASET}.'
           f'{_TEST_ITEMS_TO_DELETE_TABLE}')
+      fully_qualified_items_to_upsert_table_name = (
+          f'{_TEST_GCP_PROJECT_ID}.{_TEST_BQ_DATASET}.'
+          f'{_TEST_ITEMS_TO_UPSERT_TABLE_NAME}'
+      )
+      fully_qualified_streaming_items_table_name = (
+          f'{_TEST_GCP_PROJECT_ID}.{_TEST_BQ_DATASET}.'
+          f'{_TEST_STREAMING_ITEMS_TABLE_NAME}'
+      )
+      fully_qualified_items_to_track_expiration_table_name = (
+          f'{_TEST_GCP_PROJECT_ID}.{_TEST_BQ_DATASET}.'
+          f'{_TEST_ITEMS_TO_TRACK_EXPIRATION_TABLE_NAME}'
+      )
       fully_qualified_items_to_prevent_expiring_table_name = (
           f'{_TEST_GCP_PROJECT_ID}.{_TEST_BQ_DATASET}.'
           f'{_TEST_ITEMS_TO_PREVENT_EXPIRING_TABLE}')
-      fully_qualified_items_to_upsert_table_name = (
-          f'{_TEST_GCP_PROJECT_ID}.{_TEST_BQ_DATASET}.'
-          f'{_TEST_ITEMS_TO_UPSERT_TABLE}')
-      fully_qualified_streaming_items_table_name = (
-          f'{_TEST_GCP_PROJECT_ID}.{_TEST_BQ_DATASET}.'
-          f'{_TEST_STREAMING_ITEMS_TABLE}')
-      mock_table_exists.side_effect = [True] * 5
+      mock_table_exists.side_effect = [True] * 6
 
       main.calculate_product_changes(self.event, self.context)
 
       calls = [
           mock.call(mock.ANY, _TEST_FULLY_QUALIFIED_ITEMS_TABLE),
           mock.call(mock.ANY, fully_qualified_items_to_delete_table_name),
-          mock.call(mock.ANY,
-                    fully_qualified_items_to_prevent_expiring_table_name),
           mock.call(mock.ANY, fully_qualified_items_to_upsert_table_name),
-          mock.call(mock.ANY, fully_qualified_streaming_items_table_name)
+          mock.call(mock.ANY, fully_qualified_streaming_items_table_name),
+          mock.call(
+              mock.ANY, fully_qualified_items_to_track_expiration_table_name
+          ),
+          mock.call(
+              mock.ANY, fully_qualified_items_to_prevent_expiring_table_name
+          ),
       ]
       mock_table_exists.assert_has_calls(calls)
 
@@ -659,17 +668,46 @@ class CalculateProductChangesTest(parameterized.TestCase):
       mock_count_changes.side_effect = [0, 0, 0]
 
       expected_run_materialize_job_calls = [
-          mock.call(mock.ANY, mock.ANY, _TEST_STREAMING_ITEMS_TABLE_NAME,
-                    mock.ANY, mock.ANY,
-                    _TEST_WRITE_DISPOSITION.WRITE_TRUNCATE.name),
-          mock.call(mock.ANY, mock.ANY, _TEST_DELETES_TABLE_NAME, mock.ANY,
-                    mock.ANY, _TEST_WRITE_DISPOSITION.WRITE_APPEND.name),
-          mock.call(mock.ANY, mock.ANY, _TEST_UPSERTS_TABLE_NAME, mock.ANY,
-                    mock.ANY, _TEST_WRITE_DISPOSITION.WRITE_TRUNCATE.name),
-          mock.call(mock.ANY, mock.ANY, _TEST_UPSERTS_TABLE_NAME, mock.ANY,
-                    mock.ANY, _TEST_WRITE_DISPOSITION.WRITE_APPEND.name),
-          mock.call(mock.ANY, mock.ANY, _TEST_EXPIRATIONS_TABLE_NAME, mock.ANY,
-                    mock.ANY, _TEST_WRITE_DISPOSITION.WRITE_TRUNCATE.name),
+          mock.call(
+              mock.ANY,
+              mock.ANY,
+              _TEST_STREAMING_ITEMS_TABLE_NAME,
+              mock.ANY,
+              mock.ANY,
+              _TEST_WRITE_DISPOSITION.WRITE_TRUNCATE.name,
+          ),
+          mock.call(
+              mock.ANY,
+              mock.ANY,
+              _TEST_ITEMS_TO_DELETE_TABLE,
+              mock.ANY,
+              mock.ANY,
+              _TEST_WRITE_DISPOSITION.WRITE_APPEND.name,
+          ),
+          mock.call(
+              mock.ANY,
+              mock.ANY,
+              _TEST_ITEMS_TO_UPSERT_TABLE_NAME,
+              mock.ANY,
+              mock.ANY,
+              _TEST_WRITE_DISPOSITION.WRITE_TRUNCATE.name,
+          ),
+          mock.call(
+              mock.ANY,
+              mock.ANY,
+              _TEST_ITEMS_TO_UPSERT_TABLE_NAME,
+              mock.ANY,
+              mock.ANY,
+              _TEST_WRITE_DISPOSITION.WRITE_APPEND.name,
+          ),
+          mock.call(
+              mock.ANY,
+              mock.ANY,
+              _TEST_ITEMS_TO_TRACK_EXPIRATION_TABLE_NAME,
+              mock.ANY,
+              mock.ANY,
+              _TEST_WRITE_DISPOSITION.WRITE_TRUNCATE.name,
+          ),
       ]
 
       main.calculate_product_changes(self.event, self.context)

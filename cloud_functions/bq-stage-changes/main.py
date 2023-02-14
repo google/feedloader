@@ -182,8 +182,10 @@ def _calculate_product_changes(
     # refex: disable=pytotw.037
     logging.error(
         RuntimeError(
-            'One or more errors occurred in archiving. Cleaning up...'),
-        archive_error)
+            'One or more errors occurred in archiving. Cleaning up... '
+            f'{archive_error}'
+        )
+    )
     _clean_up(storage_client, bigquery_client, lock_bucket,
               fully_qualified_items_table_name)
     return
@@ -217,8 +219,10 @@ def _calculate_product_changes(
   except Exception as parse_bigquery_config_error:  
     # refex: disable=pytotw.037
     logging.error(
-        RuntimeError('Parsing the config file failed.'),
-        parse_bigquery_config_error)
+        RuntimeError(
+            f'Parsing the config file failed. {parse_bigquery_config_error}'
+        )
+    )
     _clean_up(storage_client, bigquery_client, lock_bucket,
               fully_qualified_items_table_name)
     return
