@@ -33,6 +33,7 @@ _TEST_COMPLETED_FILES_PROCESSED = 150
 _TEST_COMPLETED_FILES_BUCKET = 'completed-bucket'
 _TEST_DELETES_THRESHOLD = '100000'
 _TEST_EOF_BUCKET = 'update-bucket'
+_TEST_EOF_BUCKET_LOCAL = 'update-bucket-local'
 _TEST_EXPIRATION_THRESHOLD = '25'
 _TEST_FEED_BUCKET = 'feed-bucket'
 _TEST_FILENAME = 'EOF'
@@ -55,6 +56,7 @@ _TEST_RETRIGGER_BUCKET = 'retrigger-bucket'
 _TEST_STREAMING_ITEMS_TABLE_NAME = main._STREAMING_ITEMS_TABLE_NAME
 _TEST_TASK_QUEUE_LOCATION = main._TASK_QUEUE_LOCATION
 _TEST_TASK_QUEUE_NAME = main._TASK_QUEUE_NAME
+_TEST_TASK_QUEUE_NAME_LOCAL = main._TASK_QUEUE_NAME_LOCAL
 _TEST_TIMESTAMP = '2021-06-05T08:16:25.183Z'
 _TEST_TIMEZONE_UTC_OFFSET = '+09:00'
 _TEST_UPSERTS_THRESHOLD = '100000'
@@ -993,6 +995,71 @@ class CalculateProductChangesTest(parameterized.TestCase):
                                           _TEST_TASK_QUEUE_NAME,
                                           _TEST_TASK_QUEUE_LOCATION,
                                           test_task_payload)
+
+  @mock.patch('main._lock_exists')
+  @mock.patch('main._cleanup_completed_filenames_async')
+  @mock.patch('main._clean_up')
+  @mock.patch('main._set_table_expiration_date')
+  @mock.patch('main._archive_folder')
+  @mock.patch('main._table_exists')
+  @mock.patch('main._parse_bigquery_config')
+  @mock.patch('main._run_materialize_job')
+  @mock.patch('main._count_changes')
+  @mock.patch('main._create_task')
+  def test_calculate_product_changes_calls_create_task_for_local_inventory_feed(
+      self,
+      mock_create_task,
+      mock_count_changes,
+      mock_run_materialize_job,
+      mock_parse_bigquery_config,
+      mock_table_exists,
+      mock_archive_folder,
+      mock_set_table_expiration_date,
+      mock_clean_up,
+      mock_cleanup_completed_filenames_async,
+      mock_lock_exists,
+      _,
+  ):
+    # unused by this test.
+    del (
+        mock_cleanup_completed_filenames_async,
+        mock_clean_up,
+        mock_set_table_expiration_date,
+        mock_run_materialize_job,
+    )
+
+    with mock.patch('main.storage.Client') as mock_storage_client, mock.patch(
+        'main.bigquery.Client'
+    ):
+      mock_table_exists.return_value = True
+      mock_lock_exists.return_value = False
+      matching_fileset = ['file1', 'file2', 'file3']
+      test_attempted_files, test_completed_files = _setup_fake_filesets(
+          matching_fileset, matching_fileset
+      )
+      mock_storage_client.return_value.list_blobs.side_effect = [
+          test_attempted_files,
+          test_completed_files,
+      ]
+      mock_archive_folder.return_value = True
+      mock_parse_bigquery_config.return_value = (_TEST_QUERY, '')
+      mock_count_changes.side_effect = [0, 0, 0]
+      mock_create_task.return_value = True
+      test_task_payload = {
+          'deleteCount': 0,
+          'expiringCount': 0,
+          'upsertCount': 0,
+      }
+      self.event['bucket'] = _TEST_EOF_BUCKET_LOCAL
+
+      main.calculate_product_changes(self.event, self.context)
+
+      mock_create_task.assert_called_with(
+          _TEST_GCP_PROJECT_ID,
+          _TEST_TASK_QUEUE_NAME_LOCAL,
+          _TEST_TASK_QUEUE_LOCATION,
+          test_task_payload,
+      )
 
   def test_create_task_sends_task_to_task_queue(self, _):
     with mock.patch(

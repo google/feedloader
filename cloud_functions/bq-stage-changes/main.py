@@ -48,6 +48,7 @@ _LOCK_FILE_NAME = 'EOF.lock'
 _MERCHANT_ID_COLUMN = 'google_merchant_id'
 _TASK_QUEUE_LOCATION = 'us-central1'
 _TASK_QUEUE_NAME = 'trigger-initiator'
+_TASK_QUEUE_NAME_LOCAL = 'trigger-initiator-local'
 _WRITE_DISPOSITION = enum.Enum('WRITE_DISPOSITION',
                                'WRITE_TRUNCATE WRITE_APPEND WRITE_EMPTY')
 
@@ -399,8 +400,14 @@ def _calculate_product_changes(
       'upsertCount': upsert_count,
   }
 
-  create_task_is_successful = _create_task(gcp_project, _TASK_QUEUE_NAME,
-                                           _TASK_QUEUE_LOCATION, task_payload)
+  if not local_inventory_feed_enabled:
+    task_queue_name = _TASK_QUEUE_NAME
+  else:
+    task_queue_name = _TASK_QUEUE_NAME_LOCAL
+
+  create_task_is_successful = _create_task(
+      gcp_project, task_queue_name, _TASK_QUEUE_LOCATION, task_payload
+  )
   if not create_task_is_successful:
     _clean_up(storage_client, bigquery_client, lock_bucket,
               fully_qualified_items_table_name)
