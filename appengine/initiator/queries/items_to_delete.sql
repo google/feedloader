@@ -16,4 +16,4 @@
 SELECT
   *
 FROM
-  `${project_id}.feed_data.items_to_delete`;
+  `${project_id}.${feed_data_dataset_id}.items_to_delete`;

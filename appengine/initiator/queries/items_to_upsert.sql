@@ -20,8 +20,8 @@ FROM
     SELECT
       ALL_ITEMS.*
     FROM
-      `${project_id}.feed_data.items` AS ALL_ITEMS
+      `${project_id}.${feed_data_dataset_id}.items` AS ALL_ITEMS
   ) AS LATEST_ITEMS
 JOIN
-  `${project_id}.feed_data.items_to_upsert` AS UPDATE_ITEMS
+  `${project_id}.${feed_data_dataset_id}.items_to_upsert` AS UPDATE_ITEMS
   USING (item_id);

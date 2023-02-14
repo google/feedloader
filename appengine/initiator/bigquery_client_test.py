@@ -87,7 +87,8 @@ class BigQueryClientTest(unittest.TestCase):
     self.table_reference = table.TableReference(self.dataset_reference,
                                                 TABLE_ID)
     self.dummy_query = bigquery_client.generate_query_string(
-        DUMMY_QUERY_FILEPATH, PROJECT_ID)
+        DUMMY_QUERY_FILEPATH, PROJECT_ID, DATASET_ID
+    )
 
   def test_initialize_dataset_and_table_when_neither_dataset_nor_table_exists(
       self):
@@ -144,8 +145,13 @@ SELECT {};
 """.format(PROJECT_ID)
     self.assertEqual(
         expected_generated_query,
-        bigquery_client.generate_query_string(DUMMY_QUERY_FILEPATH, PROJECT_ID))
+        bigquery_client.generate_query_string(
+            DUMMY_QUERY_FILEPATH, PROJECT_ID, DATASET_ID
+        ),
+    )
 
   def test_generate_query_string_with_non_existing_file(self):
     with self.assertRaises(IOError):
-      bigquery_client.generate_query_string('wrong_filepath', PROJECT_ID)
+      bigquery_client.generate_query_string(
+          'wrong_filepath', PROJECT_ID, DATASET_ID
+      )

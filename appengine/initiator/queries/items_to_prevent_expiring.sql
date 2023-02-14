@@ -16,8 +16,8 @@
 SELECT
   *
 FROM
-  `${project_id}.feed_data.items` AS CURRENT_ITEMS
+  `${project_id}.${feed_data_dataset_id}.items` AS CURRENT_ITEMS
 JOIN
-  `${project_id}.feed_data.items_to_prevent_expiring` AS EXPIRING_ITEMS
+  `${project_id}.${feed_data_dataset_id}.items_to_prevent_expiring` AS EXPIRING_ITEMS
   USING (item_id);
 

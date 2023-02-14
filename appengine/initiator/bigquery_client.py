@@ -22,12 +22,15 @@ from google import cloud
 from google.cloud import bigquery
 
 
-def generate_query_string(filepath: str, project_id: str) -> str:
+def generate_query_string(
+    filepath: str, project_id: str, feed_data_dataset_id: str
+) -> str:
   """Generates string format of a query.
 
   Args:
     filepath: The path to the file containing the input query.
     project_id: GCP project id.
+    feed_data_dataset_id: Dataset ID for feed data.
 
   Returns:
     The query with the GCP project ID.
@@ -42,7 +45,9 @@ def generate_query_string(filepath: str, project_id: str) -> str:
       query_string = ''.join(
           line for line in query_file.readlines() if not line.startswith('#'))
       query_template = string.Template(query_string)
-      return query_template.substitute(project_id=project_id)
+      return query_template.substitute(
+          project_id=project_id, feed_data_dataset_id=feed_data_dataset_id
+      )
   except IOError as io_error:
     raise IOError(
         'Query file does not exist: {}'.format(filepath)) from io_error
