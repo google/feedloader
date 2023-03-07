@@ -44,7 +44,9 @@ import utils
 
 app = flask.Flask(__name__)
 
-_SHOPTIMIZER_CONFIG_FILE_PATH = 'config/shoptimizer_config.json'
+LOCAL_SUFFIX_FOR_BIGQUERY = '_local'
+LOCAL_SUFFIX_FOR_TASK_QUEUE = '-local'
+HEADER_NAME_FOR_TASK_QUEUE = 'X-Appengine-Queuename'
 
 OPERATION_TO_METHOD = {
     constants.Operation.UPSERT: constants.Method.INSERT,
@@ -94,6 +96,14 @@ def _run_process(operation: constants.Operation) -> Tuple[str, int]:
   """
   logging_client = cloud_logging.Client()
   logging_client.setup_logging(log_level=logging.DEBUG)
+
+  queue_name = flask.request.headers.get(HEADER_NAME_FOR_TASK_QUEUE)
+  logging.info('Queue name of the incoming request is %s.', queue_name)
+
+  local_inventory_feed_enabled = (
+      True if LOCAL_SUFFIX_FOR_TASK_QUEUE in queue_name else False
+  )
+
   request_body = json.loads(flask.request.data.decode('utf-8'))
   task = upload_task.UploadTask.from_json(request_body)
 
@@ -112,7 +122,9 @@ def _run_process(operation: constants.Operation) -> Tuple[str, int]:
       task.start_index, task.batch_size, task.timestamp)
 
   try:
-    items = _load_items_from_bigquery(operation, task)
+    items = _load_items_from_bigquery(
+        operation, task, local_inventory_feed_enabled
+    )
   except errors.HttpError:
     return 'Error loading items from BigQuery', http.HTTPStatus.INTERNAL_SERVER_ERROR
 
@@ -129,25 +141,32 @@ def _run_process(operation: constants.Operation) -> Tuple[str, int]:
     method = OPERATION_TO_METHOD.get(operation)
 
     # Creates batch from items loaded from BigQuery
-    original_batch, skipped_item_ids, batch_id_to_item_id = batch_creator.create_batch(
-        batch_number, items, method, channel)
-
-    # Optimizes batch via Shoptimizer for upsert/prevent_expiring operations
-    try:
-      shoptimizer_integration_on = (
-          dist_util.strtobool(
-              utils.load_environment_variable('SHOPTIMIZER_API_INTEGRATION_ON'))
+    if not local_inventory_feed_enabled:
+      original_batch, skipped_item_ids, batch_id_to_item_id = (
+          batch_creator.create_batch(batch_number, items, method, channel)
       )
-    except ValueError:
-      shoptimizer_integration_on = False
 
-    if operation != constants.Operation.DELETE and shoptimizer_integration_on:
-      batch_to_send_to_content_api = _create_optimized_batch(
-          original_batch, batch_number, operation)
+      # Optimizes batch via Shoptimizer for upsert/prevent_expiring operations.
+      try:
+        shoptimizer_integration_on = dist_util.strtobool(
+            utils.load_environment_variable('SHOPTIMIZER_API_INTEGRATION_ON')
+        )
+      except ValueError:
+        shoptimizer_integration_on = False
+
+      if operation != constants.Operation.DELETE and shoptimizer_integration_on:
+        batch_to_send_to_content_api = _create_optimized_batch(
+            original_batch, batch_number, operation
+        )
+      else:
+        batch_to_send_to_content_api = original_batch
     else:
-      batch_to_send_to_content_api = original_batch
+      return (
+          'Batch operation for local inventory feed is not ready.',
+          http.HTTPStatus.NOT_IMPLEMENTED,
+      )
 
-    # Sends batch of items to Content API for Shopping
+    # Sends batch of items to Content API for Shopping.
     api_client = content_api_client.ContentApiClient()
     successful_item_ids, item_failures = api_client.process_items(
         batch_to_send_to_content_api, batch_number, batch_id_to_item_id, method,
@@ -190,20 +209,27 @@ def _run_process(operation: constants.Operation) -> Tuple[str, int]:
 
 def _load_items_from_bigquery(
     operation: constants.Operation,
-    task: upload_task.UploadTask) -> List[bigquery.Row]:
+    task: upload_task.UploadTask,
+    local_inventory_feed_enabled: bool,
+) -> List[bigquery.Row]:
   """Loads items from BigQuery.
 
   Args:
     operation: The operation to be performed on this batch of items.
     task: The Cloud Task object that initiated this request.
+    local_inventory_feed_enabled: True if the incoming request is for local
+      inventory feed. Otherwise, False.
 
   Returns:
     The list of items loaded from BigQuery.
   """
   table_id = f'process_items_to_{operation.value}_{task.timestamp}'
+  dataset_id = constants.DATASET_ID_FOR_PROCESSING
+  if local_inventory_feed_enabled:
+    dataset_id += LOCAL_SUFFIX_FOR_BIGQUERY
   bq_client = bigquery_client.BigQueryClient.from_service_account_json(
-      constants.GCP_SERVICE_ACCOUNT_PATH, constants.DATASET_ID_FOR_PROCESSING,
-      table_id)
+      constants.GCP_SERVICE_ACCOUNT_PATH, dataset_id, table_id
+  )
   try:
     items_iterator = bq_client.load_items(task.start_index, task.batch_size)
   except errors.HttpError as http_error:

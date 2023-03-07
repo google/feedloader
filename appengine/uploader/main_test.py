@@ -51,7 +51,12 @@ DUMMY_SKIPPED = ['0005']
 INSERT_URL = '/insert_items'
 DELETE_URL = '/delete_items'
 PREVENT_EXPIRING_URL = '/prevent_expiring_items'
-REQUEST_HEADERS = {'X-AppEngine-TaskExecutionCount': '0'}
+HEADER_NAME_FOR_TASK_EXECUTION_COUNT = 'X-AppEngine-TaskExecutionCount'
+TASK_QUEUE_NAME = 'processing-items'
+REQUEST_HEADERS = {
+    HEADER_NAME_FOR_TASK_EXECUTION_COUNT: '0',
+    main.HEADER_NAME_FOR_TASK_QUEUE: TASK_QUEUE_NAME,
+}
 
 
 @mock.patch.dict(
@@ -235,10 +240,11 @@ class MainTest(parameterized.TestCase):
         http_error)
 
     with self.assertLogs(level='ERROR') as log:
+      headers = REQUEST_HEADERS.copy()
+      headers[HEADER_NAME_FOR_TASK_EXECUTION_COUNT] = f'{max_retry_count}'
       self.test_client.post(
-          INSERT_URL,
-          data=DUMMY_REQUEST_BODY,
-          headers={'X-AppEngine-TaskExecutionCount': f'{max_retry_count}'})
+          INSERT_URL, data=DUMMY_REQUEST_BODY, headers=headers
+      )
 
       self.assertIn(
           'ERROR:root:Batch #1 with operation upsert, initiation timestamp '
@@ -248,12 +254,18 @@ class MainTest(parameterized.TestCase):
 
   def test_run_process_should_return_ok_when_execution_count_header_missing_and_content_api_call_returns_success(
       self):
+    headers = REQUEST_HEADERS.copy()
+    del headers[HEADER_NAME_FOR_TASK_EXECUTION_COUNT]
     self.mock_bq_client.from_service_account_json.return_value.load_items.return_value = DUMMY_ROWS
-    response = self.test_client.post(INSERT_URL, data=DUMMY_REQUEST_BODY)
+    response = self.test_client.post(
+        INSERT_URL, data=DUMMY_REQUEST_BODY, headers=headers
+    )
     self.assertEqual(http.HTTPStatus.OK, response.status_code)
 
   def test_run_process_should_log_error_when_execution_count_header_missing_and_content_api_call_returns_error(
       self):
+    headers = REQUEST_HEADERS.copy()
+    del headers[HEADER_NAME_FOR_TASK_EXECUTION_COUNT]
     http_error = errors.HttpError(
         mock.MagicMock(
             status=http.HTTPStatus.INTERNAL_SERVER_ERROR,
@@ -262,7 +274,9 @@ class MainTest(parameterized.TestCase):
         http_error)
 
     with self.assertLogs(level='ERROR') as log:
-      self.test_client.post(INSERT_URL, data=DUMMY_REQUEST_BODY)
+      self.test_client.post(
+          INSERT_URL, data=DUMMY_REQUEST_BODY, headers=headers
+      )
 
       self.assertIn(
           'ERROR:root:Batch #1 with operation upsert, initiation timestamp '
@@ -355,3 +369,46 @@ class MainTest(parameterized.TestCase):
         DELETE_URL, data=DUMMY_REQUEST_BODY, headers=REQUEST_HEADERS)
 
     self.mock_shoptimizer_client.return_value.shoptimize.assert_not_called()
+
+  @parameterized.named_parameters(
+      {
+          'testcase_name': 'main',
+          'queue_name': TASK_QUEUE_NAME,
+          'dataset_id': constants.DATASET_ID_FOR_PROCESSING,
+      },
+      {
+          'testcase_name': 'local',
+          'queue_name': TASK_QUEUE_NAME + main.LOCAL_SUFFIX_FOR_TASK_QUEUE,
+          'dataset_id': (
+              constants.DATASET_ID_FOR_PROCESSING
+              + main.LOCAL_SUFFIX_FOR_BIGQUERY
+          ),
+      },
+  )
+  def test_load_items_from_correct_bigquery_table(self, queue_name, dataset_id):
+    headers = REQUEST_HEADERS.copy()
+    headers[main.HEADER_NAME_FOR_TASK_QUEUE] = queue_name
+
+    _ = self.test_client.post(
+        INSERT_URL, data=DUMMY_REQUEST_BODY, headers=headers
+    )
+
+    self.mock_bq_client.from_service_account_json.assert_called_with(
+        service_account_path=mock.ANY,
+        dataset_id=dataset_id,
+        table_id=mock.ANY,
+    )
+
+  def test_run_process_should_return_error_when_create_batch_for_local_called(
+      self,
+  ):
+    headers = REQUEST_HEADERS.copy()
+    headers[main.HEADER_NAME_FOR_TASK_QUEUE] = (
+        TASK_QUEUE_NAME + main.LOCAL_SUFFIX_FOR_TASK_QUEUE
+    )
+
+    response = self.test_client.post(
+        INSERT_URL, data=DUMMY_REQUEST_BODY, headers=headers
+    )
+
+    self.assertEqual(http.HTTPStatus.NOT_IMPLEMENTED, response.status_code)
