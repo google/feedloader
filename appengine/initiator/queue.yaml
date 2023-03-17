@@ -49,14 +49,14 @@ queue:
     target: uploader
     max_concurrent_requests: 24
   - name: processing-items-local
-    rate: 60/m
-    bucket_size: 24
+    rate: 100/m
+    bucket_size: 20
     retry_parameters:
       task_retry_limit: 5
       min_backoff_seconds: 60
       max_backoff_seconds: 120
     target: uploader
-    max_concurrent_requests: 24
+    max_concurrent_requests: 20
   - name: trigger-initiator
     rate: 1/m
     bucket_size: 1
