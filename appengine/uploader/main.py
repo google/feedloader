@@ -126,24 +126,39 @@ def _run_process(operation: constants.Operation) -> Tuple[str, int]:
         operation, task, local_inventory_feed_enabled
     )
   except errors.HttpError:
-    return 'Error loading items from BigQuery', http.HTTPStatus.INTERNAL_SERVER_ERROR
+    return (
+        'Error loading items from BigQuery',
+        http.HTTPStatus.INTERNAL_SERVER_ERROR,
+    )
 
   result = process_result.ProcessResult([], [], [])
   try:
     if not items:
       logging.error(
-          'Batch %s #%d, operation %s: 0 items loaded from BigQuery so batch not '
-          'sent to Content API. Start_index: %d, batch_size: %d, initiation '
-          'timestamp: %s', channel.value, batch_number, operation.value,
-          task.start_index, task.batch_size, task.timestamp)
+          (
+              'Batch %s #%d, operation %s: 0 items loaded from BigQuery so'
+              ' batch not sent to Content API. Start_index: %d, batch_size: %d,'
+              ' initiation timestamp: %s'
+          ),
+          channel.value,
+          batch_number,
+          operation.value,
+          task.start_index,
+          task.batch_size,
+          task.timestamp,
+      )
       return 'No items to process', http.HTTPStatus.OK
 
     method = OPERATION_TO_METHOD.get(operation)
 
+    api_client = content_api_client.ContentApiClient()
+
     # Creates batch from items loaded from BigQuery
     if not local_inventory_feed_enabled:
       original_batch, skipped_item_ids, batch_id_to_item_id = (
-          batch_creator.create_batch(batch_number, items, method, channel)
+          batch_creator.create_batch(
+              batch_number, items, method, channel, constants.FeedType.PRIMARY
+          )
       )
 
       # Optimizes batch via Shoptimizer for upsert/prevent_expiring operations.
@@ -160,17 +175,32 @@ def _run_process(operation: constants.Operation) -> Tuple[str, int]:
         )
       else:
         batch_to_send_to_content_api = original_batch
+
+      # Sends batch of items to Content API for Shopping.
+      successful_item_ids, item_failures = api_client.process_items(
+          batch_to_send_to_content_api,
+          batch_number,
+          batch_id_to_item_id,
+          method,
+          channel,
+          constants.FeedType.PRIMARY,
+      )
     else:
-      return (
-          'Batch operation for local inventory feed is not ready.',
-          http.HTTPStatus.NOT_IMPLEMENTED,
+      original_batch, skipped_item_ids, batch_id_to_item_id = (
+          batch_creator.create_batch(
+              batch_number, items, method, channel, constants.FeedType.LOCAL
+          )
       )
 
-    # Sends batch of items to Content API for Shopping.
-    api_client = content_api_client.ContentApiClient()
-    successful_item_ids, item_failures = api_client.process_items(
-        batch_to_send_to_content_api, batch_number, batch_id_to_item_id, method,
-        channel)
+      # Sends batch of items to Content API for Shopping.
+      successful_item_ids, item_failures = api_client.process_items(
+          original_batch,
+          batch_number,
+          batch_id_to_item_id,
+          method,
+          channel,
+          constants.FeedType.LOCAL,
+      )
 
     result = process_result.ProcessResult(
         successfully_processed_item_ids=successful_item_ids,
@@ -198,12 +228,20 @@ def _run_process(operation: constants.Operation) -> Tuple[str, int]:
         task.timestamp, result.get_success_count(), result.get_failure_count(),
         result.get_skipped_count())
   finally:
-    recorder = result_recorder.ResultRecorder.from_service_account_json(
-        constants.GCP_SERVICE_ACCOUNT_PATH, constants.DATASET_ID_FOR_MONITORING,
-        constants.TABLE_ID_FOR_RESULT_COUNTS_MONITORING,
-        constants.TABLE_ID_FOR_ITEM_RESULTS_MONITORING)
-    recorder.insert_result(channel, operation, result, task.timestamp,
-                           batch_number)
+    dataset_id_for_monitoring = constants.DATASET_ID_FOR_MONITORING
+
+    if local_inventory_feed_enabled:
+      dataset_id_for_monitoring += LOCAL_SUFFIX_FOR_BIGQUERY
+    result_recorder_service = (
+        result_recorder.ResultRecorder.from_service_account_json(
+            constants.GCP_SERVICE_ACCOUNT_PATH,
+            dataset_id_for_monitoring,
+            constants.TABLE_ID_FOR_RESULT_COUNTS_MONITORING,
+            constants.TABLE_ID_FOR_ITEM_RESULTS_MONITORING,
+            )
+        )
+    result_recorder_service.insert_result(
+        channel, operation, result, task.timestamp, batch_number)
   return 'OK', http.HTTPStatus.OK
 
 
