@@ -26,13 +26,15 @@ from google.cloud import bigquery
 import constants
 import utils
 
-_FIELDS_TO_IGNORE = frozenset(['google_merchant_id'])
-_PRODUCT_ID_FORMAT = '{channel}:{contentLanguage}:{targetCountry}:{offerId}'
+_FIELDS_TO_IGNORE = {'google_merchant_id'}  # refex: disable=pytotw.034
 
 
 def create_batch(
-    batch_number: int, item_rows: List[bigquery.Row], method: constants.Method,
-    channel: constants.Channel
+    batch_number: int,
+    item_rows: List[bigquery.Row],
+    method: constants.Method,
+    channel: constants.Channel,
+    feed_type: constants.FeedType,
 ) -> Tuple[constants.Batch, List[str], constants.BatchIdToItemId]:
   """Processes a list of items into a batch ready to submit to the API.
 
@@ -44,6 +46,7 @@ def create_batch(
     item_rows: List of rows from BigQuery items table.
     method: The operation to carry out on these items (Add Delete etc)
     channel: The shopping destination channel.
+    feed_type: The feed type as an enum.
 
   Returns:
     A tuple representing the batch object (dict), a list of skipped items and a
@@ -59,11 +62,11 @@ def create_batch(
     is_mca = False
 
   for batch_id, item_row in enumerate(item_rows):
+    item_id = item_row['item_id']
     if is_mca:
       if item_row['google_merchant_id']:
         merchant_id = item_row['google_merchant_id']
       else:
-        item_id = item_row['item_id']
         logging.warning(
             'Account is MCA but missing or invalid value in field'
             'google_merchant_id for batch #%d item %s', batch_number, item_id)
@@ -77,14 +80,27 @@ def create_batch(
         'merchantId': merchant_id,
         'method': method.value,
     }
-    # Content API responses only return batch id, not item id.
-    # So we have to store a map of batch ids to items ids.
+
+    # Content API responses only return batch ID, not item ID.
+    # So it is necessary to store a map of batch IDs to Item IDs.
     formatted_item = _convert_item_to_content_api_format(
-        batch_number, item_row, channel)
-    if method == constants.Method.INSERT:
-      entry['product'] = formatted_item
-    elif method == constants.Method.DELETE:
-      formatted_product_id = _PRODUCT_ID_FORMAT.format(**formatted_item)
+        batch_number, item_row, channel, feed_type
+    )
+    formatted_product_id = (
+        f'{channel.value}:{constants.CONTENT_LANGUAGE}:'
+        f'{constants.TARGET_COUNTRY}:{item_id}'
+    )
+
+    if feed_type == constants.FeedType.PRIMARY:
+      if method == constants.Method.INSERT:
+
+        # Don't add the product ID in case of the Insert operation.
+        
+        entry['product'] = formatted_item
+      elif method == constants.Method.DELETE:
+        entry['productId'] = formatted_product_id
+    elif feed_type == constants.FeedType.LOCAL:
+      entry['localInventory'] = formatted_item
       entry['productId'] = formatted_product_id
     batch['entries'].append(entry)
     batch_id_to_item_id[batch_id] = item_row.get('item_id', '(Missing)')
@@ -93,14 +109,18 @@ def create_batch(
 
 
 def _convert_item_to_content_api_format(
-    batch_number: int, item_row: Union[bigquery.Row, constants.Product],
-    channel: constants.Channel) -> constants.Product:
+    batch_number: int,
+    item_row: Union[bigquery.Row, constants.Product],
+    channel: constants.Channel,
+    feed_type: constants.FeedType,
+) -> constants.Product:
   """Converts item to the format required by the API.
 
   Args:
     batch_number: The id used to track this batch for logging purposes
     item_row: Dictionary representation of the input item
     channel: The shopping destination channel.
+    feed_type: The feed type as an enum.
 
   Returns:
     An item (dict) that has all fields (keys and values) mapped from the input
@@ -108,7 +128,8 @@ def _convert_item_to_content_api_format(
   """
   api_formatted_item = {}
   for key, value in item_row.items():
-    # Do not add this field if we should ignore
+    if feed_type == constants.FeedType.LOCAL:
+      _FIELDS_TO_IGNORE.add('item_id')
     if key in _FIELDS_TO_IGNORE:
       continue
     try:
@@ -118,10 +139,10 @@ def _convert_item_to_content_api_format(
     except ValueError as e:
       logging.debug('Error parsing batch #%d item %s: %s', batch_number,
                     item_row['item_id'], str(e))
-  api_formatted_item['contentLanguage'] = constants.CONTENT_LANGUAGE
-  api_formatted_item['targetCountry'] = constants.TARGET_COUNTRY
-  api_formatted_item['channel'] = channel.value
-
+  if feed_type == constants.FeedType.PRIMARY:
+    api_formatted_item['contentLanguage'] = constants.CONTENT_LANGUAGE
+    api_formatted_item['targetCountry'] = constants.TARGET_COUNTRY
+    api_formatted_item['channel'] = channel.value
   return api_formatted_item
 
 
@@ -166,6 +187,8 @@ def _convert_feed_field_to_api_field(original_key: str,
   elif modified_key == 'adwordsRedirect':
     modified_key = 'adsRedirect'
     modified_value = original_value
+  elif modified_key == 'quantity':
+    modified_value = int(original_value)
   else:
     modified_value = original_value if original_value is not None else ''
   return modified_key, modified_value

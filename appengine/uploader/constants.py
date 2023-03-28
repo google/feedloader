@@ -61,6 +61,13 @@ class Operation(enum.Enum):
   PREVENT_EXPIRING = 'prevent_expiring'
 
 
+class FeedType(enum.Enum):
+  """Enum for feed types."""
+
+  PRIMARY = 'primary'
+  LOCAL = 'local'
+
+
 class Channel(enum.Enum):
   """Enum for shopping channels."""
   ONLINE = 'online'

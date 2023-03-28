@@ -17,14 +17,13 @@
 
 import os
 import unittest
-import unittest.mock as mock
+from unittest import mock
 from parameterized import parameterized
 
 import batch_creator
 import constants
 import test_utils
 
-DUMMY_CHANNEL = constants.Channel.ONLINE
 DUMMY_MERCHANT_ID = '1234567'
 ITEM_WITH_DESCRIPTION_EMPTY = {'description': ''}
 ITEM_WITH_CONDITION_USED = {'condition': 'used'}
@@ -71,41 +70,72 @@ class BatchCreatorTest(unittest.TestCase):
       ('size', 'S,M,L', 'sizes', ['S', 'M', 'L']),
       ('size', 'S M L', 'sizes', ['S M L']),
       ('item_id', 'asdf', 'offerId', 'asdf'),
-      ('price', '100', 'price', {
-          'currency': constants.TARGET_CURRENCY,
-          'value': '100'
-      }),
-      ('price', '100JPY', 'price', {
-          'currency': constants.TARGET_CURRENCY,
-          'value': '100'
-      }),
-      ('price', '100 JPY', 'price', {
-          'currency': constants.TARGET_CURRENCY,
-          'value': '100'
-      }),
-      ('sale_price', '100', 'salePrice', {
-          'currency': constants.TARGET_CURRENCY,
-          'value': '100'
-      }),
-      ('sale_price', '100 JPY', 'salePrice', {
-          'currency': constants.TARGET_CURRENCY,
-          'value': '100'
-      }),
+      ('quantity', '10', 'quantity', 10),
+      (
+          'price',
+          '100',
+          'price',
+          {'currency': constants.TARGET_CURRENCY, 'value': '100'},
+      ),
+      (
+          'price',
+          '100JPY',
+          'price',
+          {'currency': constants.TARGET_CURRENCY, 'value': '100'},
+      ),
+      (
+          'price',
+          '100 JPY',
+          'price',
+          {'currency': constants.TARGET_CURRENCY, 'value': '100'},
+      ),
+      (
+          'sale_price',
+          '100',
+          'salePrice',
+          {'currency': constants.TARGET_CURRENCY, 'value': '100'},
+      ),
+      (
+          'sale_price',
+          '100 JPY',
+          'salePrice',
+          {'currency': constants.TARGET_CURRENCY, 'value': '100'},
+      ),
       ('loyalty_points', '100', 'loyaltyPoints', {}),
       ('loyalty_points', '', 'loyaltyPoints', {}),
       ('product_type', 'clothing,shoes', 'productTypes', ['clothing', 'shoes']),
       ('product_type', '', 'productTypes', []),
       ('product_type', None, 'productTypes', []),
-      ('adwords_redirect', 'https://google.com', 'adsRedirect',
-       'https://google.com'),
-      ('included_destination', 'Local_inventory_ads', 'includedDestinations',
-       ['Local_inventory_ads']),
-      ('included_destinations', 'Local_inventory_ads,Free_local_listings',
-       'includedDestinations', ['Local_inventory_ads', 'Free_local_listings']),
-      ('excluded_destination', 'Local_inventory_ads,Free_local_listings',
-       'excludedDestinations', ['Local_inventory_ads', 'Free_local_listings']),
-      ('excluded_destinations', 'Local_inventory_ads,Free_local_listings',
-       'excludedDestinations', ['Local_inventory_ads', 'Free_local_listings']),
+      (
+          'adwords_redirect',
+          'https://google.com',
+          'adsRedirect',
+          'https://google.com',
+      ),
+      (
+          'included_destination',
+          'Local_inventory_ads',
+          'includedDestinations',
+          ['Local_inventory_ads'],
+      ),
+      (
+          'included_destinations',
+          'Local_inventory_ads,Free_local_listings',
+          'includedDestinations',
+          ['Local_inventory_ads', 'Free_local_listings'],
+      ),
+      (
+          'excluded_destination',
+          'Local_inventory_ads,Free_local_listings',
+          'excludedDestinations',
+          ['Local_inventory_ads', 'Free_local_listings'],
+      ),
+      (
+          'excluded_destinations',
+          'Local_inventory_ads,Free_local_listings',
+          'excludedDestinations',
+          ['Local_inventory_ads', 'Free_local_listings'],
+      ),
   ])
   def test_convert_feed_field_to_api_field(self, key, value, new_key_expected,
                                            new_value_expected):
@@ -140,12 +170,15 @@ class BatchCreatorTest(unittest.TestCase):
       (ITEM_WITH_ADS_REDIRECT,),
   ])
   def test_convert_item_to_content_api_format(self, fields):
+    feed_type = constants.FeedType.PRIMARY
     batch_id = 0
-    _, item, expected_api_formatted_item = test_utils.generate_item_dict_api_pair(
-        **fields)
+    _, item, expected_api_formatted_item = (
+        test_utils.generate_item_dict_api_pair(feed_type=feed_type, **fields)
+    )
 
     api_formatted_item = batch_creator._convert_item_to_content_api_format(
-        batch_id, item, DUMMY_CHANNEL)
+        batch_id, item, constants.Channel.ONLINE, feed_type
+    )
 
     self.assertEqual(expected_api_formatted_item, api_formatted_item)
 
@@ -154,11 +187,13 @@ class BatchCreatorTest(unittest.TestCase):
                          ('title', None, 'title')])
   def test_convert_item_to_content_api_format_removes_a_field_when_its_value_is_invalid(
       self, original_field_name, original_field_value, formatted_field_name):
+    feed_type = constants.FeedType.PRIMARY
     batch_id = 0
     item = {original_field_name: original_field_value}
 
     api_formatted_item = batch_creator._convert_item_to_content_api_format(
-        batch_id, item, DUMMY_CHANNEL)
+        batch_id, item, constants.Channel.ONLINE, feed_type
+    )
 
     self.assertNotIn(formatted_field_name, api_formatted_item)
 
@@ -172,12 +207,14 @@ class BatchCreatorTest(unittest.TestCase):
   })
   def test_create_insert_batch_for_mca(self, num_rows):
     method = constants.Method.INSERT
+    feed_type = constants.FeedType.PRIMARY
     batch_id = test_utils.BATCH_NUMBER
     item_rows, expected_batch, _, _ = test_utils.generate_test_data(
         method, num_rows)
 
-    actual_batch, _, _ = batch_creator.create_batch(batch_id, item_rows, method,
-                                                    DUMMY_CHANNEL)
+    actual_batch, _, _ = batch_creator.create_batch(
+        batch_id, item_rows, method, constants.Channel.ONLINE, feed_type
+    )
 
     self.assertEqual(expected_batch, actual_batch)
 
@@ -188,12 +225,14 @@ class BatchCreatorTest(unittest.TestCase):
   @mock.patch.dict(os.environ, {'IS_MCA': 'False'})
   def test_create_insert_batch_not_mca(self, num_rows):
     method = constants.Method.INSERT
+    feed_type = constants.FeedType.PRIMARY
     batch_id = test_utils.BATCH_NUMBER
     item_rows, expected_batch, _, _ = test_utils.generate_test_data(
         method, num_rows)
 
-    actual_batch, _, _ = batch_creator.create_batch(batch_id, item_rows, method,
-                                                    DUMMY_CHANNEL)
+    actual_batch, _, _ = batch_creator.create_batch(
+        batch_id, item_rows, method, constants.Channel.ONLINE, feed_type
+    )
 
     self.assertEqual(expected_batch, actual_batch)
 
@@ -204,12 +243,14 @@ class BatchCreatorTest(unittest.TestCase):
   @mock.patch.dict(os.environ, {'IS_MCA': 'True'})
   def test_create_delete_batch_for_mca(self, num_rows):
     method = constants.Method.DELETE
+    feed_type = constants.FeedType.PRIMARY
     batch_id = test_utils.BATCH_NUMBER
     item_rows, expected_batch, _, _ = test_utils.generate_test_data(
         method, num_rows)
 
-    actual_batch, _, _ = batch_creator.create_batch(batch_id, item_rows, method,
-                                                    DUMMY_CHANNEL)
+    actual_batch, _, _ = batch_creator.create_batch(
+        batch_id, item_rows, method, constants.Channel.ONLINE, feed_type
+    )
 
     self.assertEqual(expected_batch, actual_batch)
 
@@ -220,12 +261,14 @@ class BatchCreatorTest(unittest.TestCase):
   @mock.patch.dict(os.environ, {'IS_MCA': 'False'})
   def test_create_delete_batch_not_mca(self, num_rows):
     method = constants.Method.DELETE
+    feed_type = constants.FeedType.PRIMARY
     batch_id = test_utils.BATCH_NUMBER
     item_rows, expected_batch, _, _ = test_utils.generate_test_data(
         method, num_rows)
 
-    actual_batch, _, _ = batch_creator.create_batch(batch_id, item_rows, method,
-                                                    DUMMY_CHANNEL)
+    actual_batch, _, _ = batch_creator.create_batch(
+        batch_id, item_rows, method, constants.Channel.ONLINE, feed_type
+    )
 
     self.assertEqual(expected_batch, actual_batch)
 
@@ -235,13 +278,15 @@ class BatchCreatorTest(unittest.TestCase):
   })
   def test_create_batch_returns_skipped_items_when_merchant_id_missing(self):
     method = constants.Method.INSERT
+    feed_type = constants.FeedType.PRIMARY
     batch_number = test_utils.BATCH_NUMBER
     remove_merchant_ids = True
     item_rows, _, _, _ = test_utils.generate_test_data(
         method, test_utils.MULTIPLE_ITEM_COUNT, remove_merchant_ids)
 
-    _, skipped_item_ids, _ = batch_creator.create_batch(batch_number, item_rows,
-                                                        method, DUMMY_CHANNEL)
+    _, skipped_item_ids, _ = batch_creator.create_batch(
+        batch_number, item_rows, method, constants.Channel.ONLINE, feed_type
+    )
 
     self.assertEqual(test_utils.MULTIPLE_ITEM_COUNT, len(skipped_item_ids))
     self.assertEqual('test id', skipped_item_ids[0])
@@ -250,13 +295,55 @@ class BatchCreatorTest(unittest.TestCase):
   @mock.patch.dict(os.environ, {'MERCHANT_ID': DUMMY_MERCHANT_ID})
   def test_create_batch_returns_batch_to_item_id_dict(self):
     method = constants.Method.INSERT
+    feed_type = constants.FeedType.PRIMARY
     batch_id = test_utils.BATCH_NUMBER
     item_rows, _, _, _ = test_utils.generate_test_data(
         method, test_utils.MULTIPLE_ITEM_COUNT)
 
     _, _, batch_to_item_id_dict = batch_creator.create_batch(
-        batch_id, item_rows, method, DUMMY_CHANNEL)
+        batch_id, item_rows, method, constants.Channel.ONLINE, feed_type
+    )
 
     self.assertEqual(test_utils.MULTIPLE_ITEM_COUNT, len(batch_to_item_id_dict))
     self.assertEqual('test id', batch_to_item_id_dict.get(0))
     self.assertEqual('test id', batch_to_item_id_dict.get(1))
+
+  @parameterized.expand([
+      [test_utils.SINGLE_ITEM_COUNT],
+      [test_utils.MULTIPLE_ITEM_COUNT],
+  ])
+  @mock.patch.dict(
+      os.environ, {'IS_MCA': 'True', 'MERCHANT_ID': DUMMY_MERCHANT_ID}
+  )
+  def test_create_local_inventory_feed_insert_batch_for_mca(self, num_rows):
+    method = constants.Method.INSERT
+    feed_type = constants.FeedType.LOCAL
+    batch_id = test_utils.BATCH_NUMBER
+    item_rows, expected_batch, _, _ = test_utils.generate_test_data_local(
+        method, num_rows
+    )
+
+    actual_batch, _, _ = batch_creator.create_batch(
+        batch_id, item_rows, method, constants.Channel.LOCAL, feed_type
+    )
+
+    self.assertEqual(expected_batch, actual_batch)
+
+  @parameterized.expand([
+      [test_utils.SINGLE_ITEM_COUNT],
+      [test_utils.MULTIPLE_ITEM_COUNT],
+  ])
+  @mock.patch.dict(os.environ, {'IS_MCA': 'False'})
+  def test_create_local_inventory_feed_insert_batch_not_mca(self, num_rows):
+    method = constants.Method.INSERT
+    feed_type = constants.FeedType.LOCAL
+    batch_id = test_utils.BATCH_NUMBER
+    item_rows, expected_batch, _, _ = test_utils.generate_test_data_local(
+        method, num_rows
+    )
+
+    actual_batch, _, _ = batch_creator.create_batch(
+        batch_id, item_rows, method, constants.Channel.LOCAL, feed_type
+    )
+
+    self.assertEqual(expected_batch, actual_batch)
