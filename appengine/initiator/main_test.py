@@ -304,7 +304,27 @@ class MainTest(unittest.TestCase):
         channel=_TEST_CHANNEL_LOCAL)
     self.assertEqual(self.tasks_client.return_value.push_tasks.call_count, 2)
 
-  def test_two_tasks_created_when_local_inventory_is_used(self):
+  def test_a_task_created_with_local_inventory_feed_and_lia(self):
+    headers = _build_headers_for_start(local_inventory_feed_enabled=True)
+    request_body = _build_request_body_for_start(
+        delete_count=0, expiring_count=0, upsert_count=_DUMMY_UPSERT_COUNT
+    )
+    self.test_app_client.post(_START_PATH, json=request_body, headers=headers)
+    self.tasks_client.return_value.push_tasks.assert_any_call(
+        total_items=_DUMMY_UPSERT_COUNT,
+        batch_size=mock.ANY,
+        timestamp=mock.ANY,
+        channel=_TEST_CHANNEL_LOCAL,
+    )
+    self.assertEqual(self.tasks_client.return_value.push_tasks.call_count, 1)
+
+  @mock.patch.dict(
+      os.environ,
+      {
+          'USE_LOCAL_INVENTORY_ADS': 'False',
+      },
+  )
+  def test_a_task_created_with_primary_feed_and_no_lia(self):
     headers = _build_headers_for_start()
     request_body = _build_request_body_for_start(
         delete_count=0, expiring_count=0, upsert_count=_DUMMY_UPSERT_COUNT)
@@ -313,13 +333,25 @@ class MainTest(unittest.TestCase):
         total_items=_DUMMY_UPSERT_COUNT,
         batch_size=mock.ANY,
         timestamp=mock.ANY,
-        channel=_TEST_CHANNEL_LOCAL)
-    self.tasks_client.return_value.push_tasks.assert_any_call(
-        total_items=_DUMMY_UPSERT_COUNT,
-        batch_size=mock.ANY,
-        timestamp=mock.ANY,
         channel=_TEST_CHANNEL_ONLINE)
-    self.assertEqual(self.tasks_client.return_value.push_tasks.call_count, 2)
+    self.assertEqual(self.tasks_client.return_value.push_tasks.call_count, 1)
+
+  @mock.patch.dict(
+      os.environ,
+      {
+          'USE_LOCAL_INVENTORY_ADS': 'False',
+      },
+  )
+  def test_raises_error_when_create_task_with_local_inventory_feed_and_no_lia(
+      self,
+  ):
+    headers = _build_headers_for_start(local_inventory_feed_enabled=True)
+    request_body = _build_request_body_for_start(
+        delete_count=0, expiring_count=0, upsert_count=_DUMMY_UPSERT_COUNT
+    )
+
+    with self.assertRaises(main.LocalInventoryFeedEnabledButLIADisabledError):
+      self.test_app_client.post(_START_PATH, json=request_body, headers=headers)
 
   def test_eof_not_uploaded_when_no_content_api_call_required(self):
     headers = _build_headers_for_start()

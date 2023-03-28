@@ -61,9 +61,6 @@ _QUERY_FILEPATH_FOR_DELETE = 'queries/items_to_delete.sql'
 _QUERY_FILEPATH_FOR_PREVENT_EXPIRING = 'queries/items_to_prevent_expiring.sql'
 _MAILER_TOPIC_NAME = 'mailer-trigger'
 
-_API_METHOD_INSERT = 'insert'
-_API_METHOD_DELETE = 'delete'
-
 _TABLE_SUFFIX_UPSERT = 'upsert'
 _TABLE_SUFFIX_DELETE = 'delete'
 _TABLE_SUFFIX_PREVENT_EXPIRING = 'prevent_expiring'
@@ -172,11 +169,21 @@ def start() -> Tuple[str, http.HTTPStatus]:
   except TypeError:
     logging.exception('An invalid numeric value was provided.')
     _cleanup(local_inventory_feed_enabled)
-    return f'An invalid numeric value was provided. Upsert count: {task.upsert_count}. Delete count: {task.delete_count}. Expiring count: {task.expiring_count}', http.HTTPStatus.BAD_REQUEST
+    return (
+        (
+            'An invalid numeric value was provided. Upsert count: '
+            f'{task.upsert_count}. Delete count: {task.delete_count}. '
+            f'Expiring count: {task.expiring_count}'
+        ),
+        http.HTTPStatus.BAD_REQUEST,
+    )
   except cloud_exceptions.GoogleCloudError as gcp_error:
     logging.exception('GCP error raised.')
     _cleanup(local_inventory_feed_enabled)
-    response_code = gcp_error.code if gcp_error.code else http.HTTPStatus.INTERNAL_SERVER_ERROR
+    if gcp_error.code:
+      response_code = gcp_error.code
+    else:
+      response_code = http.HTTPStatus.INTERNAL_SERVER_ERROR
     return 'GCP API returned an error.', response_code
   except auth_exceptions.GoogleAuthError:
     logging.exception('Authorization error raised due to service account.')
@@ -243,6 +250,10 @@ def _create_tasks_in_cloud_tasks(
     timestamp: timestamp to identify the run.
     local_inventory_feed_enabled: True if the incoming request is for local
       inventory feed. Otherwise, False.
+
+  Raises:
+    LocalInventoryFeedEnabledButLIADisabledError: Find an inconsistency between
+      local_inventory_feed_enabled and use_lia.
   """
   project_id = _load_environment_variable('PROJECT_ID')
   location = _load_environment_variable('REGION')
@@ -271,12 +282,19 @@ def _create_tasks_in_cloud_tasks(
         batch_size=_BATCH_SIZE,
         timestamp=timestamp,
         channel=_CHANNEL_LOCAL)
-    cloudtasks_client.push_tasks(
-        total_items=items_count,
-        batch_size=_BATCH_SIZE,
-        timestamp=timestamp,
-        channel=_CHANNEL_ONLINE)
+    if not local_inventory_feed_enabled:
+      cloudtasks_client.push_tasks(
+          total_items=items_count,
+          batch_size=_BATCH_SIZE,
+          timestamp=timestamp,
+          channel=_CHANNEL_ONLINE,
+      )
   else:
+    if local_inventory_feed_enabled:
+      raise LocalInventoryFeedEnabledButLIADisabledError(
+          'Find an inconsistency between local_inventory_feed_enabled and '
+          'use_lia. local_inventory_feed_enabled is True but use_lia is false.'
+      )
     cloudtasks_client.push_tasks(
         total_items=items_count,
         batch_size=_BATCH_SIZE,
@@ -352,6 +370,10 @@ def _trigger_mailer_for_nothing_processed() -> None:
 def _load_environment_variable(key: str) -> str:
   """Helper that loads an environment variable with the matching key."""
   return os.environ.get(key, '')
+
+
+class LocalInventoryFeedEnabledButLIADisabledError(Exception):
+  """Raised when local inventory feed is enabled but LIA is disabled."""
 
 
 if __name__ == '__main__':
