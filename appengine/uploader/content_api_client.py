@@ -52,9 +52,14 @@ class ContentApiClient(object):
           constants.CONFIG_DIRECTORY, constants.MC_SERVICE_ACCOUNT_FILE)
 
   def process_items(
-      self, batch: constants.Batch, batch_number: int,
-      batch_id_to_item_id: constants.BatchIdToItemId, method: constants.Method,
-      channel: constants.Channel) -> Tuple[List[str], List[failure.Failure]]:
+      self,
+      batch: constants.Batch,
+      batch_number: int,
+      batch_id_to_item_id: constants.BatchIdToItemId,
+      method: constants.Method,
+      channel: constants.Channel,
+      feed_type: constants.FeedType,
+  ) -> Tuple[List[str], List[failure.Failure]]:
     """Processes a list of items via a single batch to the API.
 
     Args:
@@ -63,6 +68,7 @@ class ContentApiClient(object):
       batch_id_to_item_id: Mapping from batch_id to item_id.
       method: Method being sent to the API.
       channel: The shopping channel.
+      feed_type: The enum of feed type.
 
     Returns:
       An instance of ContentApiResult.
@@ -71,13 +77,20 @@ class ContentApiClient(object):
       number_of_items = len(batch.get('entries', []))
       logging.info('Batch %s #%d: Received %d items to submit via API',
                    channel.value, batch_number, number_of_items)
-      response = self._submit_batch(batch)
+      response = self._submit_batch(batch, feed_type)
       successful_item_ids, item_failures = _handle_response(
           response, batch_number, batch_id_to_item_id)
       logging.info(
-          'Batch %s #%d: custombatch %s API successfully submitted %d of %d items',
-          channel.value, batch_number, method.value, len(successful_item_ids),
-          number_of_items)
+          (
+              'Batch %s #%d: custombatch %s API successfully submitted '
+              '%d of %d items'
+          ),
+          channel.value,
+          batch_number,
+          method.value,
+          len(successful_item_ids),
+          number_of_items,
+      )
     except errors.HttpError as http_error:
       logging.exception(
           'Batch %s #%d: Unhandled error occurred during batch call to API: %s',
@@ -85,21 +98,33 @@ class ContentApiClient(object):
       raise
     except socket.timeout as timeout_error:
       logging.exception(
-          'Batch %s #%d: Socket timeout error occurred: %s. Check Merchant Center to confirm that the API call succeeded.',
-          channel.value, batch_number, timeout_error)
+          (
+              'Batch %s #%d: Socket timeout error occurred: %s. '
+              'Check Merchant Center to confirm that the API call succeeded.'
+          ),
+          channel.value,
+          batch_number,
+          timeout_error,
+      )
       raise
     return successful_item_ids, item_failures
 
-  def _submit_batch(self, batch: constants.Batch) -> Dict[str, Any]:
+  def _submit_batch(
+      self, batch: constants.Batch, feed_type: constants.FeedType
+  ) -> Dict[str, Any]:
     """Takes a batch object (JSON) and submits to GMC via the Shopping API.
 
     Args:
-      batch: dict, JSON formatted for the API
+      batch: dict, JSON formatted for the API.
+      feed_type: The enum of feed type.
 
     Returns:
-      The response from the API call (JSON formatted)
+      The response from the API call (JSON formatted).
     """
-    request = self._service.products().custombatch(body=batch)
+    if feed_type == constants.FeedType.PRIMARY:
+      request = self._service.products().custombatch(body=batch)
+    elif feed_type == constants.FeedType.LOCAL:
+      request = self._service.localinventory().custombatch(body=batch)
     return request.execute()
 
 
@@ -124,7 +149,10 @@ def _handle_response(
   item_failures = []
   response_kind = response.get('kind', '')
 
-  if response_kind != 'content#productsCustomBatchResponse':
+  if not (
+      response_kind == 'content#productsCustomBatchResponse'
+      or response_kind == 'content#localinventoryCustomBatchResponse'
+  ):
     logging.warning('Batch #%d: Invalid response format. Response: %s',
                     batch_number, response)
     # If the batch as a whole returned an error, log every id in the batch as

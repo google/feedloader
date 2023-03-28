@@ -16,7 +16,7 @@
 """Unit tests for ContentApiClient."""
 
 import unittest
-import unittest.mock as mock
+from unittest import mock
 
 from parameterized import parameterized
 
@@ -25,7 +25,6 @@ import content_api_client
 import test_utils
 
 _DUMMY_BATCH_NUMBER = 0
-_DUMMY_CHANNEL = constants.Channel.ONLINE
 
 
 class ModuleFunctionsTest(unittest.TestCase):
@@ -59,12 +58,21 @@ class ContentApiClientTest(unittest.TestCase):
       (constants.Method.DELETE, test_utils.MULTIPLE_ITEM_COUNT),
   ])
   def test_process_items(self, method, num_rows):
-    _, batch, batch_id_to_item_id, expected_response = test_utils.generate_test_data(
-        method, num_rows)
-    self._api_service.products.return_value.custombatch.return_value.execute.return_value = expected_response
+    _, batch, batch_id_to_item_id, expected_response = (
+        test_utils.generate_test_data(method, num_rows)
+    )
+    products = self._api_service.products.return_value
+    custombatch = products.custombatch.return_value
+    custombatch.execute.return_value = expected_response
 
     successful_item_ids, item_failures = self._client.process_items(
-        batch, _DUMMY_BATCH_NUMBER, batch_id_to_item_id, method, _DUMMY_CHANNEL)
+        batch,
+        _DUMMY_BATCH_NUMBER,
+        batch_id_to_item_id,
+        method,
+        constants.Channel.ONLINE,
+        constants.FeedType.PRIMARY,
+    )
 
     self._api_service.products.return_value.custombatch.return_value.execute.assert_called(
     )
@@ -78,13 +86,21 @@ class ContentApiClientTest(unittest.TestCase):
   def test_process_items_insert_returns_items_with_errors(self, num_rows):
     _, batch, batch_id_to_item_id, _ = test_utils.generate_test_data(
         constants.Method.INSERT, num_rows)
-    response_with_errors = test_utils._generate_insert_response_with_errors(
-        num_rows)
-    self._api_service.products.return_value.custombatch.return_value.execute.return_value = response_with_errors
+    response_with_errors = test_utils.generate_insert_response_with_errors(
+        constants.FeedType.PRIMARY, num_rows
+    )
+    products = self._api_service.products.return_value
+    custombatch = products.custombatch.return_value
+    custombatch.execute.return_value = response_with_errors
 
     successful_item_ids, item_failures = self._client.process_items(
-        batch, _DUMMY_BATCH_NUMBER, batch_id_to_item_id,
-        constants.Method.INSERT, _DUMMY_CHANNEL)
+        batch,
+        _DUMMY_BATCH_NUMBER,
+        batch_id_to_item_id,
+        constants.Method.INSERT,
+        constants.Channel.ONLINE,
+        constants.FeedType.PRIMARY,
+    )
 
     self._api_service.products.return_value.custombatch.return_value.execute.assert_called(
     )
@@ -98,13 +114,21 @@ class ContentApiClientTest(unittest.TestCase):
   def test_process_items_delete_returns_items_with_errors(self, num_rows):
     _, batch, batch_id_to_item_id, _ = test_utils.generate_test_data(
         constants.Method.DELETE, num_rows)
-    response_with_errors = test_utils._generate_delete_response_with_errors(
-        num_rows)
-    self._api_service.products.return_value.custombatch.return_value.execute.return_value = response_with_errors
+    response_with_errors = test_utils.generate_delete_response_with_errors(
+        num_rows
+    )
+    products = self._api_service.products.return_value
+    custombatch = products.custombatch.return_value
+    custombatch.execute.return_value = response_with_errors
 
     successful_item_ids, item_failures = self._client.process_items(
-        batch, _DUMMY_BATCH_NUMBER, batch_id_to_item_id,
-        constants.Method.DELETE, _DUMMY_CHANNEL)
+        batch,
+        _DUMMY_BATCH_NUMBER,
+        batch_id_to_item_id,
+        constants.Method.DELETE,
+        constants.Channel.ONLINE,
+        constants.FeedType.PRIMARY,
+    )
 
     self._api_service.products.return_value.custombatch.return_value.execute.assert_called(
     )
@@ -119,15 +143,78 @@ class ContentApiClientTest(unittest.TestCase):
       self, num_rows):
     _, batch, batch_id_to_item_id, _ = test_utils.generate_test_data(
         constants.Method.INSERT, num_rows)
-    response_with_errors = test_utils._generate_response_with_invalid_kind_value(
-        num_rows)
-    self._api_service.products.return_value.custombatch.return_value.execute.return_value = response_with_errors
+    response_with_errors = test_utils.generate_response_with_invalid_kind_value(
+        num_rows
+    )
+    products = self._api_service.products.return_value
+    custombatch = products.custombatch.return_value
+    custombatch.execute.return_value = response_with_errors
 
     successful_item_ids, item_failures = self._client.process_items(
-        batch, _DUMMY_BATCH_NUMBER, batch_id_to_item_id,
-        constants.Method.INSERT, _DUMMY_CHANNEL)
+        batch,
+        _DUMMY_BATCH_NUMBER,
+        batch_id_to_item_id,
+        constants.Method.INSERT,
+        constants.Channel.ONLINE,
+        constants.FeedType.PRIMARY,
+    )
 
     self._api_service.products.return_value.custombatch.return_value.execute.assert_called(
     )
+    self.assertEqual(0, len(successful_item_ids))
+    self.assertEqual(num_rows, len(item_failures))
+
+  @parameterized.expand([
+      (constants.Method.INSERT, test_utils.SINGLE_ITEM_COUNT),
+      (constants.Method.INSERT, test_utils.MULTIPLE_ITEM_COUNT),
+  ])
+  def test_process_items_local_inventory_feed(self, method, num_rows):
+    _, batch, batch_id_to_item_id, expected_response = (
+        test_utils.generate_test_data_local(method, num_rows)
+    )
+    self._api_service.localinventory.return_value.custombatch.return_value.execute.return_value = (
+        expected_response
+    )
+
+    successful_item_ids, item_failures = self._client.process_items(
+        batch,
+        _DUMMY_BATCH_NUMBER,
+        batch_id_to_item_id,
+        method,
+        constants.Channel.LOCAL,
+        constants.FeedType.LOCAL,
+    )
+
+    self._api_service.localinventory.return_value.custombatch.return_value.execute.assert_called()
+    self.assertEqual(num_rows, len(successful_item_ids))
+    self.assertEqual(0, len(item_failures))
+
+  @parameterized.expand([
+      (test_utils.SINGLE_ITEM_COUNT,),
+      (test_utils.MULTIPLE_ITEM_COUNT,),
+  ])
+  def test_process_items_local_inventory_feed_insert_returns_items_with_errors(
+      self, num_rows
+  ):
+    _, batch, batch_id_to_item_id, _ = test_utils.generate_test_data_local(
+        constants.Method.INSERT, num_rows
+    )
+    response_with_errors = test_utils.generate_insert_response_with_errors(
+        constants.FeedType.LOCAL, num_rows
+    )
+    self._api_service.localinventory.return_value.custombatch.return_value.execute.return_value = (
+        response_with_errors
+    )
+
+    successful_item_ids, item_failures = self._client.process_items(
+        batch,
+        _DUMMY_BATCH_NUMBER,
+        batch_id_to_item_id,
+        constants.Method.INSERT,
+        constants.Channel.LOCAL,
+        constants.FeedType.LOCAL,
+    )
+
+    self._api_service.localinventory.return_value.custombatch.return_value.execute.assert_called()
     self.assertEqual(0, len(successful_item_ids))
     self.assertEqual(num_rows, len(item_failures))
