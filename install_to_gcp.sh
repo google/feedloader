@@ -236,6 +236,10 @@ print_green "Creating BigQuery datasets and tables..."
 CreateBQTables() {
   local BQ_FEED_DATASET=$1
   local BQ_MONITOR_DATASET=$2
+  # If NEED_EXPIRATION_TABLE is True, the expiration related tables are created.
+  # Otherwise, they are not created. This logic is needed because local
+  # inventory feed does not have expiration.
+  local NEED_EXPIRATION_TABLE=$3
   if bq ls --all | grep -q -w "$BQ_FEED_DATASET"
   then
     echo "$BQ_FEED_DATASET already exists."
@@ -254,7 +258,7 @@ CreateBQTables() {
   bq rm -f "$BQ_FEED_DATASET".items_to_upsert
   bq mk -t --schema 'item_id:STRING' "$BQ_FEED_DATASET".items_to_upsert
 
-  if ! [[ "$ENABLE_LOCAL_INVENTORY_FEEDS" -eq "True" ]]; then
+  if "${NEED_EXPIRATION_TABLE}"; then
     bq rm -f "$BQ_FEED_DATASET".items_expiration_tracking
     bq mk -t \
       --schema 'item_id:STRING,last_touched_date:DATE' \
@@ -319,10 +323,10 @@ CreateBQTables() {
       WHERE timestamp > FORMAT_DATETIME(\"%Y%m%d\", DATETIME_SUB(CURRENT_DATETIME(), INTERVAL 30 DAY))"
 }
 
-CreateBQTables "$BQ_FEED_DATASET" "$BQ_MONITOR_DATASET"
+CreateBQTables "$BQ_FEED_DATASET" "$BQ_MONITOR_DATASET" "True"
 if echo "$ENABLE_LOCAL_INVENTORY_FEEDS"
 then
-  CreateBQTables "$BQ_FEED_DATASET_LOCAL" "$BQ_MONITOR_DATASET_LOCAL"
+  CreateBQTables "$BQ_FEED_DATASET_LOCAL" "$BQ_MONITOR_DATASET_LOCAL" "False"
 fi
 
 # Create Cloud Pub/Sub topics
