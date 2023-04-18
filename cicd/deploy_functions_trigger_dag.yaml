@@ -13,15 +13,10 @@
 # limitations under the License.
 
 steps:
-- name: python:3
-  entrypoint: /bin/sh
-  args:
-    - -c
-    - pip install google-auth requests && python composer/get_cc_client_id.py ${_GCP_PROJECT} ${_REGION} ${_CLOUD_COMPOSER_ENV_NAME} > /workspace/cc_client_id
 - name: gcr.io/cloud-builders/gcloud
   entrypoint: /bin/sh
   dir: cloud_functions/trigger-monitor-dag-function
   args:
     - -c
-    - gcloud functions deploy trigger_dag --retry --timeout 540s --set-env-vars CLIENT_ID=$(cat /workspace/cc_client_id),WEBSERVER_ID=${_AIRFLOW_WEBSERVER_ID},DAG_NAME=${_DAG_ID} --trigger-resource ${_TRIGGER_COMPLETION_BUCKET} --trigger-event google.storage.object.finalize --runtime python39
+    - gcloud functions deploy trigger_dag --retry --timeout 540s --set-env-vars WEBSERVER_ID=${_AIRFLOW_WEBSERVER_ID},DAG_NAME=${_DAG_ID} --trigger-resource ${_TRIGGER_COMPLETION_BUCKET} --trigger-event google.storage.object.finalize --runtime python39
 timeout: 3600s
