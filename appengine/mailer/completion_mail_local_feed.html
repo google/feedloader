@@ -1,0 +1,330 @@
+<!--
+ @license
+ Copyright 2021 Google LLC
+ SPDX-License-Identifier: Apache-2.0
+-->
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+
+<head>
+    <meta charset="utf-8">
+    <title>Local Product Inventory Feed Processing Completed</title>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    <!--[if !mso]><!-->
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <!--<![endif]-->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="no index">
+    <!--[if mso | ie]>
+      <style>
+         .sup {
+         vertical-align: 1px !important;
+         font-family:Roboto, Arial, Helvetica, sans-serif; font-size: 100% !important;
+         }
+         .pd2{
+         padding-top:0 !important;
+         }
+      </style>
+      <![endif]-->
+    <!--[if ie]>
+      <style>
+         .sup {
+         vertical-align: 6px !important;
+         font-family:Roboto, Arial, Helvetica, sans-serif; font-size: 80% !important;
+         }
+      </style>
+      <![endif]-->
+    <style>
+        body {
+            font-family: Roboto, Arial, Helvetica, sans-serif;
+            font-size: 15px;
+            color: #000;
+            -webkit-text-size-adjust: none !important;
+            -webkit-font-smoothing: antialiased !important;
+            -ms-text-size-adjust: none !important;
+        }
+
+        table,
+        tr,
+        td {
+            mso-table-lspace: 0pt;
+            mso-table-rspace: 0pt;
+        }
+
+        a:link,
+        a:visited,
+        a:hover,
+        a:active {
+            color: #4285f4;
+            text-decoration: none;
+        }
+
+        .appleLinks a {
+            color: #000 !important;
+            text-decoration: none !important;
+        }
+
+        strong {
+            font-weight: bold !important;
+        }
+
+        em {
+            font-style: italic !important;
+        }
+
+        .yshortcuts a span {
+            color: inherit !important;
+            border-bottom: none !important;
+        }
+
+        html {
+            -webkit-text-size-adjust: none;
+            -ms-text-size-adjust: 100%;
+        }
+
+        .ReadMsgbody1 {
+            width: 100%;
+        }
+
+        .ExternalClass {
+            width: 100%;
+        }
+
+        .ExternalClass * {
+            line-height: 100%
+        }
+
+        td {
+            -webkit-text-size-adjust: none;
+        }
+
+        a[href^=tel] {
+            color: inherit;
+            text-decoration: none;
+        }
+
+        .mob-hide {
+            display: none !important;
+        }
+
+        div,
+        p,
+        a,
+        li,
+        td {
+            -webkit-text-size-adjust: none;
+        }
+
+        td {
+            text-decoration: none !important;
+        }
+
+        a[x-apple-data-detectors] {
+            color: inherit !important;
+            text-decoration: none !important;
+            font-size: inherit !important;
+            font-family: inherit !important;
+            font-weight: inherit !important;
+            line-height: inherit !important;
+        }
+
+        @media screen and (max-width:480px) {
+            .pd {
+                padding-left: 20px !important;
+                padding-right: 20px !important;
+            }
+
+        }
+    </style>
+</head>
+
+<body style="margin:10 !important; padding:0 0 0 0 !important; background-color:#f2f2f2;">
+    <!-- Main table width 480px starts -->
+    <!--[if (gte mso 9)|(IE)]>
+                <table align="center" width="480" cellspacing="0" cellpadding="0">
+                   <tr>
+                      <td>
+                         <![endif]-->
+    <table width="650" style="max-width: 650px; width: 100%; margin: 0 auto; text-align: center;" cellpadding="0"
+        cellspacing="0" border="0">
+        <tr>
+            <td valign="top" align="center" style="padding-top: 10">
+                <!-- 2 column header starts -->
+
+                <table width="100%" cellpadding="10" cellspacing="10" border="0" id="templateColumns">
+                    <tr>
+                        <td align="center" valign="top" width="50%" class="templateColumnContainer">
+                            <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                                <tr>
+                                    <td class="leftColumnContent">
+                                        <img src="https://www.gstatic.com/images/branding/googlelogo/2x/googlelogo_color_120x48dp.png"
+                                            class="columnImage" width="120" alt="Google" style="-ms-interpolation-mode:bicubic; height:auto; outline:none; text-decoration:none"
+                                            height="auto">
+                                    </td>
+                                </tr>
+
+                            </table>
+                        </td>
+                        <td align="center" valign="middle" width="50%" class="templateColumnContainer">
+                            <table border="0" align="center" cellpadding="0" cellspacing="10" width="100%">
+                                <tr>
+                                    <td class="rightColumnContent" ; style="font-family:Google Sans, Arial, sans-serif; font-size: 16px; font-weight: 700; color: #9aa0a6; letter-spacing: -0.31px; text-align: right;">{{ currentMonth }}
+                                        {{ currentYear }}</td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                </table>
+                <!-- 2 column header ends -->
+        <tr>
+            <td align="center" valign="top" bgcolor="#4285F4" style="-webkit-border-radius:0; -moz-border-radius:0; border-radius: 0; border-left: 1px solid #efefef; border-top: 1px solid #efefef; border-right: 1px solid #efefef; border-bottom: 1px solid #efefef;">
+                <table width="100%" border="0" cellspacing="0" cellpadding="0">
+                    <tbody>
+
+
+                        <!-- Title starts -->
+                        <tr>
+                            <td valign="top" align="center" style="display: table-cell; text-align: center; padding: 30px 0 10px 0; background-size: contain; background-color: #4285f4; background-position: top; background-repeat: repeat-x"><img
+                                    alt="[ENTER ALT TEXT HERE]" height="auto" src="https://services.google.com/fh/files/emails/gcp_notification.png"
+                                    style="width: 30px; height: {hero_width}px; " width="50"></td>
+                        </tr>
+                        <tr>
+                            <td valign="top" align="center" style="font-family:Google Sans, Roboto, Helvetica, Arial sans-serif; font-size: 28px; border: 1px; border-color: #4285f4; font-weight: 500; line-height:36px; color: #fff; padding:0 40px 10px 40px; letter-spacing: -0.31px">Local Shopping
+                                Feed Upload Completed</td>
+                        </tr>
+                        <!-- Title ends -->
+
+                    </tbody>
+                </table>
+            </td>
+        </tr>
+        <!-- Main card start -->
+        <tr>
+            <td align="center" valign="top" bgcolor="#ffffff" style="-webkit-border-radius:0; -moz-border-radius:0; border-radius: 0; border-left: 1px solid #efefef; border-top: 1px solid #efefef; border-right: 1px solid #efefef; border-bottom: 1px solid #efefef;">
+                <table width="100%" border="0" cellspacing="0" cellpadding="0">
+                    <tbody>
+                        <!-- Spacer starts -->
+                        <tr>
+                            <td align="center" width="100%" style="display: table-cell; text-align: center; padding: 10px 0 10px 0;">&nbsp;</td>
+                        </tr>
+                        <!-- Spacer ends -->
+
+                        <!-- Paragraph starts -->
+                        <tr>
+                            <td valign="top" align="left" style="font-family:Roboto, Helvetica, Arial sans-serif; font-size: 14px; line-height:24px; color: #414347; padding:20px 40px 20px 40px;">
+                                <p>Processing of the Local Shopping Feed upload to Content API has completed
+                                    on {{ fullTimestamp }} for your project "{{ projectId }}".</p>
+
+                                <h3>Run Results for Local Shopping:</h3>
+                                <table border="1" align="center" width="100%" style="border-collapse: collapse; table-layout: fixed">
+                                    <tr align="center" valign="top">
+                                        <th></th>
+                                        <th colspan="3">Content API (Local Feed) Result</th>
+                                    </tr>
+                                    <tr align="center" valign="top">
+                                        <th></th>
+                                        <th>Succeeded</th>
+                                        <th>Failed</th>
+                                        <th>Missing Merchant ID <small>(not processed)</small></th>
+                                    </tr>
+                                    {% for result in runResults['online'] %}
+                                        <tr align="center">
+                                            <td><i>{{ result.description }}</i></td>
+                                            <td>{{ result.success_count }}</td>
+                                            <td>{{ result.failure_count }}</td>
+                                            <td>{{ result.skipped_count }}</td>
+                                        </tr>
+                                    {% endfor %}
+                                </table>
+                                <h3>Local Products Processed: {{ totalItemsProcessed['local'] }}</h3>
+
+                                <p>For more details on the results of this run or for more information about failures, please click on the link below to be
+                                    directed to the Google Cloud Console logs.</p>
+                            </td>
+                        </tr>
+                        <!-- Paragraph ends -->
+
+                        <!-- Button starts -->
+                        <tr>
+                            <td align="center" valign="top" style="padding:0 0 0 0; ">
+                                <table width="100%" border="0" cellspacing="0" cellpadding="0">
+                                    <tr>
+                                        <td>
+                                            <table align="center" border="0" cellspacing="0" cellpadding="0">
+                                                <tr>
+                                                    <td align="center" style="border-radius: 3px;" bgcolor="#4285f4"><a
+                                                            href="https://console.cloud.google.com/logs/viewer?project={{ projectId }}"
+                                                            target="_blank" style="font-size: 16px; font-family: Google Sans, Roboto, Helvetica, Arial, sans-serif; font-weight: 500; letter-spacing: -0.31px; color: #ffffff; text-decoration: none; text-decoration: none;border-radius: 3px; padding: 11px 19px 11px 19px; border: 1px solid #4285f4; display: inline-block;">
+                                                            <!--[if gte mso 15]>&nbsp;&nbsp;&nbsp;<![endif]-->View Logs
+                                                            in GCP
+                                                            <!--[if gte mso 15]>&nbsp;&nbsp;&nbsp;<![endif]--></a></td>
+                                                </tr>
+                                            </table>
+                                        </td>
+                                    </tr>
+                                </table>
+                            </td>
+                        </tr>
+                        <!-- Button end -->
+                        <!-- Spacer starts -->
+                        <tr>
+                            <td align="center" width="100%" style="display: table-cell; text-align: center; padding: 10px 0 10px 0;">&nbsp;</td>
+                        </tr>
+                        <!-- Spacer ends -->
+                    </tbody>
+                </table>
+            </td>
+        </tr>
+        <!-- Main card end -->
+
+        <!-- Blank space start -->
+        <tr>
+            <td height="15" align="left" valign="top" style="border-collapse:collapse;mso-table-lspace:0pt;mso-table-rspace:0pt;mso-line-height-rule:exactly;line-height:15px;">
+                <!--[if gte mso 15]>&nbsp;<![endif]-->
+            </td>
+        </tr>
+        <!-- Blank space end -->
+
+        <!-- Footer starts -->
+        <tr>
+            <td align="center" valign="top" style="padding: 0 30px 30px 30px;">
+                <table width="100%" border="0" cellspacing="0" cellpadding="0">
+                    <tbody>
+                        <tr>
+                            <td align="center" valign="top" style="padding-top: 40px; padding-bottom: 23px;">
+                                <img src="http://www.gstatic.com/news/images/google_logo_day_dream.png" width="86" alt="Google"
+                                    title="Google" style="display:block; margin-left:auto; margin-right:auto;" />
+                            </td>
+                        </tr>
+                        <tr>
+                            <td align="center" valign="top" style="font-family:Roboto, Helvetica, Arial sans-serif; font-size: 14px; line-height:
+                        22px; color: #5f6368; letter-spacing: 0.25px; padding-bottom:25px;"><a
+                                    href="#" style="color: #5f6368; text-decoration: none;">© {{ currentYear }} Google LLC 1600
+                                    Amphitheatre Parkway, Mountain View, CA 94043</a></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </td>
+        </tr>
+        <!-- Footer ends -->
+
+
+        <!-- Blank space starts -->
+        <tr>
+            <td height="15" align="left" valign="top" style="border-collapse:collapse;mso-table-lspace:0pt;mso-table-rspace:0pt;mso-line-height-rule:exactly;line-height:15px;">
+                <!--[if gte mso 15]>&nbsp;<![endif]-->
+            </td>
+        </tr>
+        <!-- Blank space ends -->
+
+        <!-- Main ends -->
+        <!--[if (gte mso 9)|(IE)]>
+                  </td>
+               </tr>
+            </table>
+            <![endif]-->
+        <!-- Main table width 480px ends -->
+</body>
+
+</html>
