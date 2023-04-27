@@ -20,17 +20,20 @@ import os
 from typing import Any, Dict
 
 from google.api_core import exceptions
-from google.auth.transport.requests import Request
-from google.oauth2 import id_token
-
+import google.auth
+from google.auth.transport.requests import AuthorizedSession
 import requests
 
-_HTTP_REQUEST_METHODS = enum.Enum('HTTP_REQUEST_METHODS',
-                                  'GET OPTIONS HEAD POST PUT PATCH DELETE')
+_HTTP_REQUEST_METHODS = enum.Enum(
+    'HTTP_REQUEST_METHODS', 'GET OPTIONS HEAD POST PUT PATCH DELETE'
+)
+AUTH_SCOPE = 'https://www.googleapis.com/auth/cloud-platform'
+CREDENTIALS, _ = google.auth.default(scopes=[AUTH_SCOPE])
 
 
-def trigger_dag(event: Dict[str, Any],
-                context: 'google.cloud.functions.Context') -> None:
+def trigger_dag(
+    event: Dict[str, Any], context: 'google.cloud.functions.Context'
+) -> None:
   """Makes a POST request to the Composer DAG Trigger API.
 
   When called via Google Cloud Functions (GCF),
@@ -48,71 +51,71 @@ def trigger_dag(event: Dict[str, Any],
   """
   del context
 
-  client_id = os.environ.get('CLIENT_ID')
   webserver_id = os.environ.get('WEBSERVER_ID')
   dag_name = os.environ.get('DAG_NAME')
 
-  print('Attempting to trigger the Cloud Composer (Airflow) DAG named '
-        f'"{dag_name}" at {webserver_id}...')
+  print(
+      'Attempting to trigger the Cloud Composer (Airflow) DAG named '
+      f'"{dag_name}" at {webserver_id}...'
+  )
 
-  json_data = {'conf': event, 'replace_microseconds': 'false'}
-  webserver_url = f'{webserver_id}/api/experimental/dags/{dag_name}/dag_runs'
-  make_iap_request(webserver_url, client_id, method='POST', json=json_data)
+  json_data = {'conf': event}
+  webserver_url = os.path.join(webserver_id, 'api/v1/dags', dag_name, 'dagRuns')
+  _make_composer_web_server_request(
+      webserver_url, method='POST', json=json_data
+  )
 
 
-def make_iap_request(url: str,
-                     client_id: str,
-                     method: str = _HTTP_REQUEST_METHODS.GET.name,
-                     **kwargs: Dict[str, Any]) -> str:
-  """Makes a request to an application protected by Identity-Aware Proxy.
+def _make_composer_web_server_request(
+    url: str, method: str = _HTTP_REQUEST_METHODS.GET.name, **kwargs: Any
+) -> str:
+  """Make a request to Cloud Composer 2 environment's web server.
 
   Args:
-    url: The Identity-Aware Proxy-protected URL to fetch.
-    client_id: The client ID used by Identity-Aware Proxy.
+    url: The URL for Composer 2 endpoint.
     method: The request method to use ('GET', 'OPTIONS', 'HEAD', 'POST', 'PUT',
       'PATCH', 'DELETE')
     **kwargs: Any of the parameters defined for the request function:
-      https://github.com/requests/requests/blob/master/requests/api.py
-      If no timeout is provided, it is set to 90 by default.
+              https://github.com/requests/requests/blob/master/requests/api.py
+                If no timeout is provided, it is set to 90 by default.
 
   Raises:
-    GatewayTimeout: The call to the Google API was unauthorized.
-    GoogleAPICallError: The call to the Google API endpoint failed.
+    HTTPError: The HTTP request has a bad response.
 
   Returns:
-    The page body, or raises an exception if the page couldn't be retrieved.
+    The response from Composer2.
   """
+
   try:
     _HTTP_REQUEST_METHODS[method]
   except KeyError:
     logging.error(
         exceptions.BadRequest(
-            f'An invalid HTTP request method {method} was supplied.'))
+            f'An invalid HTTP request method {method} was supplied.'
+        )
+    )
     return
 
   # Sets the default timeout, if missing.
   kwargs.setdefault('timeout', 90)
 
-  print('Getting a token to call the API...')
-  google_open_id_connect_token = id_token.fetch_id_token(Request(), client_id)
+  authed_session = AuthorizedSession(CREDENTIALS)
+  response = authed_session.request(method, url, **kwargs)
 
-  print('Calling the trigger endpoint for the Cloud Composer DAG...')
-  resp = requests.request(
-      method,
-      url,
-      headers={'Authorization': f'Bearer {google_open_id_connect_token}'},
-      **kwargs)
-
-  if resp.status_code == 403:
-    logging.error(
-        exceptions.Forbidden(
-            'Service account does not have '
-            'permission to access the IAP-protected application.'))
-  elif resp.status_code != 200:
-    logging.error(
-        exceptions.GoogleAPICallError(
-            f'Bad response from application: Status: {resp.status_code}, '
-            f'Headers: {resp.headers}, Text: {resp.text}'))
+  if response.status_code == 403:
+    err_msg = (
+        (
+            'You do not have permission to perform this operation. '
+            'Check Airflow RBAC roles for your account. '
+            '%s / %s'
+        ),
+        response.headers,
+        response.text,
+    )
+    logging.error(err_msg)
+    raise requests.HTTPError(err_msg)
+  elif response.status_code != 200:
+    logging.error(response.text)
+    response.raise_for_status()
   else:
-    print(f'Response was: {resp.text}')
-    return resp.text
+    return response.text

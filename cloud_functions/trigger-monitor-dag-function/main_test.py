@@ -21,14 +21,14 @@ from absl.testing import parameterized
 
 import main
 
-_TEST_CLIENT_ID = '12345.apps.googleusercontent.com'
 _TEST_DAG_NAME = 'dag-name'
-_TEST_WEBSERVER_ID = 'https://12345-tp.appspot.com'
+_TEST_WEBSERVER_ID = (
+    'https://12345-dot-us-central1.composer.googleusercontent.com'
+)
 
 
 @mock.patch.dict(
     os.environ, {
-        'CLIENT_ID': _TEST_CLIENT_ID,
         'DAG_NAME': _TEST_DAG_NAME,
         'WEBSERVER_ID': _TEST_WEBSERVER_ID,
     })
@@ -50,8 +50,9 @@ class TriggerMonitorDagFunctionTest(parameterized.TestCase):
 
   @mock.patch.object(
       main,
-      'make_iap_request',
-      side_effect=Exception('Bad request: JSON body error'))
+      '_make_composer_web_server_request',
+      side_effect=Exception('Bad request: JSON body error'),
+  )
   def test_json_body_error(self, _):
     trigger_event = None
     with self.assertRaises(Exception) as context:
@@ -59,28 +60,25 @@ class TriggerMonitorDagFunctionTest(parameterized.TestCase):
 
     self.assertIn('Bad request: JSON body error', str(context.exception))
 
-  @mock.patch.object(
-      main,
-      'make_iap_request',
-      side_effect=Exception('Error in IAP response: unauthorized'))
-  def test_iap_response_error(self, _):
+  @mock.patch.object(main, 'AuthorizedSession')
+  def test_http_forbidden_response_error(self, mock_authorized_session):
     trigger_event = {'file': 'some-gcs-file'}
 
-    with self.assertRaises(Exception) as context:
+    mock_authorized_session.return_value.request.return_value.status_code = 403
+    with self.assertRaises(main.requests.HTTPError) as context:
       main.trigger_dag(trigger_event, self.context)
 
-    self.assertIn('Error in IAP response', str(context.exception))
+    self.assertIn(
+        'You do not have permission to perform this operation. ',
+        str(context.exception),
+    )
 
-  @mock.patch.object(main, 'make_iap_request', autospec=True)
-  def test_api_endpoint(self, make_iap_request_mock):
+  @mock.patch.object(main, '_make_composer_web_server_request', autospec=True)
+  def test_api_endpoint(self, mock_make_composer_web_server_request):
     main.trigger_dag(self.event, self.context)
 
-    make_iap_request_mock.assert_called_once_with(
-        'https://12345-tp.appspot.com/api/experimental/dags/dag-name/dag_runs',
-        '12345.apps.googleusercontent.com',
+    mock_make_composer_web_server_request.assert_called_once_with(
+        'https://12345-dot-us-central1.composer.googleusercontent.com/api/v1/dags/dag-name/dagRuns',
         method='POST',
-        json={
-            'conf': self.event,
-            'replace_microseconds': 'false'
-        },
+        json={'conf': self.event},
     )
