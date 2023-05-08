@@ -4,11 +4,14 @@ url = "https://pypi.org/simple"
 verify_ssl = true
 
 [dev-packages]
-apache-airflow = {extras = ["gcp"],version = "*"}
+apache-airflow = {version = "==2.3.3", extras = ["gcp"]}
 
 [packages]
-attrs = "*"
-frozendict = "*"
-google-api-core = "*"
-google-cloud-tasks = "*"
-parameterized = "*"
+attrs = "==20.3.0"
+frozendict = "==2.3.5"
+google-api-core = "==2.8.2"
+google-cloud-tasks = "==2.10.1"
+parameterized = "==0.8.1"
+
+[requires]
+python_version = "3.8"

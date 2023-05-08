@@ -193,20 +193,31 @@ class GetRunResultsAndTriggerReportingOperator(models.BaseOperator):
     """
     message = {
         'attributes': {
-            'content_api_results':
-                json.dumps(results, default=_convert_run_result_into_json)
+            'content_api_results': json.dumps(
+                results, default=_convert_run_result_into_json
+            )
         }
     }
     pubsub_hook = gcp_pubsub_hook.PubSubHook()
     try:
       pubsub_hook.publish(
-          self._project_id, self._topic_name, messages=[message])
+          project_id=self._project_id,
+          topic=self._topic_name,
+          messages=[message],
+      )
       logging.info(
-          'Cloud Pub/Sub message was successfully sent to /projects/%s/topics/%s. The content of the message: %s',
-          self._project_id, self._topic_name, message)
+          (
+              'Cloud Pub/Sub message was successfully sent to'
+              ' /projects/%s/topics/%s. The content of the message: %s'
+          ),
+          self._project_id,
+          self._topic_name,
+          message,
+      )
     except gcp_pubsub_hook.PubSubException as pubsub_error:
       raise PubSubAPICallError(
-          f'Cloud Pub/Sub message was not sent to /projects/{self._project_id}/topics/{self._topic_name}'
+          'Cloud Pub/Sub message was not sent to'
+          f' /projects/{self._project_id}/topics/{self._topic_name}'
       ) from pubsub_error
 
 

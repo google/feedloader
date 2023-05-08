@@ -33,7 +33,7 @@ TASK_ID = 'test_task'
 PROJECT_ID = 'test-project'
 DATASET_ID = 'test_dataset'
 TABLE_ID = 'test_table'
-QUERY_FILE_PATH = 'queries/dummy_query.sql'
+QUERY_FILE_PATH = 'sfo_plugin/operators/queries/dummy_query.sql'
 TOPIC_NAME = 'test-topic'
 
 DUMMY_INSERT_SUCCESS = 1
@@ -169,7 +169,10 @@ class GetRunResultsAndTriggerReportingTest(unittest.TestCase):
     self._mock_bq_hook.return_value.get_pandas_df.return_value = bq_result
     self._task.execute(self._context)
     self._mock_pubsub_hook.return_value.publish.assert_called_with(
-        PROJECT_ID, TOPIC_NAME, messages=expected_publish_messages)
+        project_id=PROJECT_ID,
+        topic=TOPIC_NAME,
+        messages=expected_publish_messages,
+    )
 
   def test_execute_with_non_existing_query_file_path(self):
     incorrect_path = 'invalid_directory/dummy_query.sql'
@@ -180,7 +183,8 @@ class GetRunResultsAndTriggerReportingTest(unittest.TestCase):
         query_file_path=incorrect_path,
         topic_name=TOPIC_NAME,
         dag=self._dag,
-        task_id=TASK_ID)
+        task_id=TASK_ID + '_test_execute_with_non_existing_query_file_path',
+    )
     with self.assertRaises(airflow.AirflowException):
       task.execute(self._context)
     self._mock_pubsub_hook.return_value.publish.assert_not_called()
