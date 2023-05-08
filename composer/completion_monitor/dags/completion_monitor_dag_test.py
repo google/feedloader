@@ -43,24 +43,29 @@ class CompletionMonitorDagTest(unittest.TestCase):
 
   def setUp(self):
     super(CompletionMonitorDagTest, self).setUp()
-    models.Variable.set('DAG_ID', _DAG_ID)
-    models.Variable.set('GCP_PROJECT_ID', _PROJECT_ID)
-    models.Variable.set('QUEUE_LOCATION', _QUEUE_LOCATION)
-    models.Variable.set('QUEUE_NAME', _QUEUE_NAME)
-    models.Variable.set('TRY_COUNT_LIMIT', _TRY_COUNT_LIMIT)
-    models.Variable.set('MONITOR_DATASET_ID', _MONITOR_DATASET_ID)
-    models.Variable.set('MONITOR_TABLE_ID', _MONITOR_TABLE_ID)
-    models.Variable.set('LAST_PROCESS_RESULT_QUERY_FILE_PATH', _QUERY_FILE_PATH)
-    models.Variable.set('DESTINATION_PUBSUB_TOPIC', _TOPIC_NAME)
-    models.Variable.set('TIMEZONE_UTC_OFFSET', _TIMEZONE_UTC_OFFSET)
-    models.Variable.set('FEED_DATASET_ID', _FEED_DATASET_ID)
-    models.Variable.set('ITEMS_TABLE_ID', _ITEMS_TABLE_ID)
-    models.Variable.set('EXPIRATION_TRACKING_TABLE_ID',
-                        _EXPIRATION_TRACKING_TABLE_ID)
-    models.Variable.set('ITEM_RESULTS_TABLE_ID', _ITEM_RESULTS_TABLE_ID)
-    models.Variable.set('LOCK_BUCKET', _LOCK_BUCKET)
+    models.variable.Variable.set('DAG_ID', _DAG_ID)
+    models.variable.Variable.set('GCP_PROJECT_ID', _PROJECT_ID)
+    models.variable.Variable.set('QUEUE_LOCATION', _QUEUE_LOCATION)
+    models.variable.Variable.set('QUEUE_NAME', _QUEUE_NAME)
+    models.variable.Variable.set('TRY_COUNT_LIMIT', str(_TRY_COUNT_LIMIT))
+    models.variable.Variable.set('MONITOR_DATASET_ID', _MONITOR_DATASET_ID)
+    models.variable.Variable.set('MONITOR_TABLE_ID', _MONITOR_TABLE_ID)
+    models.variable.Variable.set(
+        'LAST_PROCESS_RESULT_QUERY_FILE_PATH', _QUERY_FILE_PATH
+    )
+    models.variable.Variable.set('DESTINATION_PUBSUB_TOPIC', _TOPIC_NAME)
+    models.variable.Variable.set('TIMEZONE_UTC_OFFSET', _TIMEZONE_UTC_OFFSET)
+    models.variable.Variable.set('FEED_DATASET_ID', _FEED_DATASET_ID)
+    models.variable.Variable.set('ITEMS_TABLE_ID', _ITEMS_TABLE_ID)
+    models.variable.Variable.set(
+        'EXPIRATION_TRACKING_TABLE_ID', _EXPIRATION_TRACKING_TABLE_ID
+    )
+    models.variable.Variable.set(
+        'ITEM_RESULTS_TABLE_ID', _ITEM_RESULTS_TABLE_ID
+    )
+    models.variable.Variable.set('LOCK_BUCKET', _LOCK_BUCKET)
     self.dag_bag = models.DagBag(dag_folder='./')
-    self.dag = self.dag_bag.dags.get(_DAG_ID)
+    self.dag = self.dag_bag.get_dag(_DAG_ID)
 
   def test_import_dags(self):
     self.assertEqual(0, len(self.dag_bag.import_errors))

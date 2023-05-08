@@ -46,23 +46,28 @@ _WAIT_FOR_COMPLETION_TASK = 'wait_for_completion'
 _UPDATE_EXPIRATION_TRACKING = 'update_expiration_tracking'
 _CLEAN_UP_TASK = 'clean_up'
 _TRIGGER_REPORTING_TASK = 'get_run_results_and_trigger_reporting'
+
 # Airflow variables
-_DAG_ID = models.Variable.get('DAG_ID')
-_PROJECT_ID = models.Variable.get('GCP_PROJECT_ID')
-_QUEUE_LOCATION = models.Variable.get('QUEUE_LOCATION')
-_QUEUE_NAME = models.Variable.get('QUEUE_NAME')
-_TRY_COUNT_LIMIT = int(models.Variable.get('TRY_COUNT_LIMIT'))
-_MONITOR_DATASET_ID = models.Variable.get('MONITOR_DATASET_ID')
-_MONITOR_TABLE_ID = models.Variable.get('MONITOR_TABLE_ID')
-_RESULT_QUERY_FILE = models.Variable.get('LAST_PROCESS_RESULT_QUERY_FILE_PATH')
-_TOPIC_NAME = models.Variable.get('DESTINATION_PUBSUB_TOPIC')
-_TIMEZONE_UTC_OFFSET = models.Variable.get('TIMEZONE_UTC_OFFSET')
-_FEED_DATASET_ID = models.Variable.get('FEED_DATASET_ID')
-_ITEMS_TABLE_ID = models.Variable.get('ITEMS_TABLE_ID')
-_EXPIRATION_TRACKING_TABLE_ID = models.Variable.get(
-    'EXPIRATION_TRACKING_TABLE_ID')
-_ITEM_RESULTS_TABLE_ID = models.Variable.get('ITEM_RESULTS_TABLE_ID')
-_LOCK_BUCKET = models.Variable.get('LOCK_BUCKET')
+_DAG_ID = models.variable.Variable.get('DAG_ID')
+_PROJECT_ID = models.variable.Variable.get('GCP_PROJECT_ID')
+_QUEUE_LOCATION = models.variable.Variable.get('QUEUE_LOCATION')
+_QUEUE_NAME = models.variable.Variable.get('QUEUE_NAME')
+_TRY_COUNT_LIMIT = int(models.variable.Variable.get('TRY_COUNT_LIMIT'))
+_MONITOR_DATASET_ID = models.variable.Variable.get('MONITOR_DATASET_ID')
+_MONITOR_TABLE_ID = models.variable.Variable.get('MONITOR_TABLE_ID')
+_RESULT_QUERY_FILE = models.variable.Variable.get(
+    'LAST_PROCESS_RESULT_QUERY_FILE_PATH'
+)
+_TOPIC_NAME = models.variable.Variable.get('DESTINATION_PUBSUB_TOPIC')
+_TIMEZONE_UTC_OFFSET = models.variable.Variable.get('TIMEZONE_UTC_OFFSET')
+_FEED_DATASET_ID = models.variable.Variable.get('FEED_DATASET_ID')
+_ITEMS_TABLE_ID = models.variable.Variable.get('ITEMS_TABLE_ID')
+_EXPIRATION_TRACKING_TABLE_ID = models.variable.Variable.get(
+    'EXPIRATION_TRACKING_TABLE_ID'
+)
+_ITEM_RESULTS_TABLE_ID = models.variable.Variable.get('ITEM_RESULTS_TABLE_ID')
+_LOCK_BUCKET = models.variable.Variable.get('LOCK_BUCKET')
+
 # File paths
 _SERVICE_ACCOUNT = '/home/airflow/gcs/data/config/service_account.json'
 _UPDATE_ITEMS_EXPIRATION_TRACKING_QUERY = 'queries/update_items_expiration_tracking.sql'
@@ -113,8 +118,10 @@ _bq_to_pubsub = bq_to_pubsub_operator.GetRunResultsAndTriggerReportingOperator(
 _clean_up = clean_up_operator.CleanUpOperator(
     task_id=_CLEAN_UP_TASK,
     dag=dag,
+    project_id=_PROJECT_ID,
     dataset_id=_FEED_DATASET_ID,
     table_id=_ITEMS_TABLE_ID,
-    bucket_id=_LOCK_BUCKET)
+    bucket_id=_LOCK_BUCKET,
+)
 
 _wait_for_completion >> _update_expiration_tracking >> _bq_to_pubsub >> _clean_up  
