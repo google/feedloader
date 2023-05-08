@@ -28,11 +28,19 @@ from google.cloud import exceptions as cloud_exceptions
 class CleanUpOperator(models.BaseOperator):
   """Airflow operator to clean up the data."""
 
-  def __init__(self, dataset_id: Text, table_id: Text, bucket_id: Text, *args,
-               **kwargs):
+  def __init__(
+      self,
+      project_id: Text,
+      dataset_id: Text,
+      table_id: Text,
+      bucket_id: Text,
+      *args,
+      **kwargs,
+  ):
     """Inits CleanUpOperator.
 
     Args:
+      project_id: GCP Project ID
       dataset_id: BigQuery dataset ID.
       table_id: BigQuery table ID.
       bucket_id: Cloud Storage bucket ID.
@@ -40,6 +48,7 @@ class CleanUpOperator(models.BaseOperator):
       **kwargs: keyword arguments to initialize the super class.
     """
     super(CleanUpOperator, self).__init__(*args, **kwargs)
+    self._project_id = project_id
     self._dataset_id = dataset_id
     self._table_id = table_id
     self._bucket_id = _retrieve_bucket_name(bucket_id)
@@ -59,7 +68,7 @@ class CleanUpOperator(models.BaseOperator):
     try:
       bq_hook = bigquery_hook.BigQueryHook()
       bq_cursor = bq_hook.get_cursor()
-      table_name = f'{self._dataset_id}.{self._table_id}'
+      table_name = f'{self._project_id}.{self._dataset_id}.{self._table_id}'
       bq_cursor.run_table_delete(
           deletion_dataset_table=table_name, ignore_if_missing=True)
       logging.info('Successfully deleted table: %s', table_name)
@@ -69,7 +78,7 @@ class CleanUpOperator(models.BaseOperator):
       ) from bq_api_error
     try:
       storage_hook = gcs_hook.GoogleCloudStorageHook()
-      storage_hook.delete(bucket=self._bucket_id, object='EOF.lock')
+      storage_hook.delete(bucket_name=self._bucket_id, object_name='EOF.lock')
       logging.info('Successfully deleted the EOF.lock file.')
     except cloud_exceptions.NotFound:
       logging.info('EOF.lock is not found. It might have been already deleted.')

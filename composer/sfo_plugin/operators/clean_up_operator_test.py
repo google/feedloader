@@ -27,6 +27,7 @@ from google.cloud import exceptions as cloud_exceptions
 
 from sfo_plugin.operators import clean_up_operator
 
+_PROJECT_ID = 'test_project'
 _DAG_ID = 'test_dag'
 _TASK_ID = 'test_task'
 _DATASET_ID = 'test_dataset'
@@ -45,18 +46,21 @@ class CleanUpOperatorTest(unittest.TestCase):
         gcs_hook, 'GoogleCloudStorageHook', autospec=True).start()
     dag = models.DAG(dag_id=_DAG_ID, start_date=datetime.datetime.now())
     self._task = clean_up_operator.CleanUpOperator(
+        project_id=_PROJECT_ID,
         dataset_id=_DATASET_ID,
         table_id=_TABLE_ID,
         bucket_id=_BUCKET_ID,
         dag=dag,
-        task_id=_TABLE_ID)
+        task_id=_TABLE_ID,
+    )
     self.addCleanup(mock.patch.stopall)
 
   def test_execute_should_delete_items_table(self):
     self._task.execute(self._context)
     self._mock_bq_hook.return_value.get_cursor.return_value.run_table_delete.assert_called_with(
-        deletion_dataset_table=f'{_DATASET_ID}.{_TABLE_ID}',
-        ignore_if_missing=True)
+        deletion_dataset_table=f'{_PROJECT_ID}.{_DATASET_ID}.{_TABLE_ID}',
+        ignore_if_missing=True,
+    )
 
   def test_execute_should_stop_airflow_with_bq_api_error(self):
     self._mock_bq_hook.return_value.get_cursor.return_value.run_table_delete.side_effect = Exception(
@@ -67,7 +71,8 @@ class CleanUpOperatorTest(unittest.TestCase):
   def test_execute_should_delete_lock_file(self):
     self._task.execute(self._context)
     self._mock_gcs_hook.return_value.delete.assert_called_with(
-        bucket=_BUCKET_ID, object='EOF.lock')
+        bucket_name=_BUCKET_ID, object_name='EOF.lock'
+    )
 
   def test_execute_should_stop_airflow_with_cloud_storage_error(self):
     self._mock_gcs_hook.return_value.delete.side_effect = cloud_exceptions.GoogleCloudError(
@@ -87,4 +92,5 @@ class CleanUpOperatorTest(unittest.TestCase):
   def test_execute_should_delete_eof_lock(self):
     self._task.execute(self._context)
     self._mock_gcs_hook.return_value.delete.assert_called_with(
-        bucket=_BUCKET_ID, object='EOF.lock')
+        bucket_name=_BUCKET_ID, object_name='EOF.lock'
+    )
