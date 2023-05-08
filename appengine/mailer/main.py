@@ -24,6 +24,7 @@ import os
 import flask
 from google.appengine.api import app_identity
 from google.appengine.api import mail
+from typing import Any, Dict
 import jinja2
 import pytz
 
@@ -46,7 +47,6 @@ _OPERATION_DESCRIPTIONS = {
 _OPERATIONS = (_CONTENT_API_OPERATION_UPSERT, _CONTENT_API_OPERATION_DELETE,
                _CONTENT_API_OPERATION_PREVENT_EXPIRING)
 
-# Get environment variables
 _PUBSUB_VERIFICATION_TOKEN = 'PUBSUB_VERIFICATION_TOKEN'
 _EMAIL_TO = 'EMAIL_TO'
 _USE_LOCAL_INVENTORY_ADS = 'USE_LOCAL_INVENTORY_ADS'
@@ -66,6 +66,7 @@ def pubsub_push():
   request_body = json.loads(flask.request.data.decode('utf-8'))
   try:
     run_results_dict = _extract_run_result(request_body)
+    local_feeds_enabled = _extract_local_feed_setting(request_body)
   except ValueError:
     logging.error('Request body is not JSON-encodable: %s', request_body)
     return 'Invalid request body', httplib.BAD_REQUEST
@@ -101,32 +102,56 @@ def pubsub_push():
           _use_local_inventory_ads(),
   }
 
-  template = jinja_environment.get_template('completion_mail.html')
+  if local_feeds_enabled:
+    template = jinja_environment.get_template('completion_mail_local_feed.html')
+    email_subject = 'Local Shopping Feed Processing Completed'
+  else:
+    template = jinja_environment.get_template('completion_mail.html')
+    email_subject = 'Shopping Feed Processing Completed'
+
   html_body = template.render(template_values)
   message = mail.EmailMessage(
       sender='no-reply@{0}.appspotmail.com'.format(_project_id()),
-      subject='Shopping Feed Processing Completed',
+      subject=email_subject,
       to=_load_environment_variable(_EMAIL_TO),
       html=html_body)
   message.send()
   return 'OK!', httplib.OK
 
 
-def _extract_run_result(request_body):
+def _extract_run_result(request_body) -> Dict[str, Any]:
   """Extracts run results from the request body came from Cloud Pub/Sub.
 
   Args:
-    request_body: dict, a request body came from Cloud Pub/Sub.
+    request_body: The request body dict that came from Cloud Pub/Sub.
 
   Returns:
-    a dict containing the result of a run.
+    A dict containing the result of a run.
   """
-  run_results_str = request_body.get('message',
-                                     {}).get('attributes',
-                                             {}).get('content_api_results',
-                                                     '[]')
+  run_results_str = (
+      request_body.get('message', {})
+      .get('attributes', {})
+      .get('content_api_results', '[]')
+  )
   run_results_dict = json.loads(run_results_str.decode('utf-8'))
   return run_results_dict
+
+
+def _extract_local_feed_setting(request_body) -> bool:
+  """Extracts the boolean setting of whether local inventory feeds are enabled or not.
+
+  Args:
+    request_body: The request body dict that came from Cloud Pub/Sub.
+
+  Returns:
+    A boolean representing the state of the local feed setting.
+  """
+  local_feeds_enabled = (
+      request_body.get('message', {})
+      .get('attributes', {})
+      .get('local_feeds_enabled', False)
+  )
+  return bool(local_feeds_enabled)
 
 
 def _get_run_result_list(run_results_dict):

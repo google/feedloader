@@ -80,7 +80,8 @@ class MainTest(parameterized.TestCase):
       })
   def test_pubsub_push_success(self, channels):
     request_params = {'token': _DUMMY_PUBSUB_TOKEN}
-    request_data = _create_pubsub_msg(channels)
+    request_data = (
+        _create_pubsub_msg(local_feeds_enabled=False, channels=channels))
     response = self.test_client.post(
         '/pubsub/push', query_string=request_params, data=request_data)
     self.assertEqual(_HTTP_OK, response.status_code)
@@ -98,7 +99,8 @@ class MainTest(parameterized.TestCase):
     self.testbed.setup_env(USE_LOCAL_INVENTORY_ADS='True', overwrite=True)
     request_params = {'token': _DUMMY_PUBSUB_TOKEN}
     channels = (_CHANNEL_ONLINE, _CHANNEL_LOCAL)
-    request_data = _create_pubsub_msg(channels)
+    request_data = (
+        _create_pubsub_msg(local_feeds_enabled=False, channels=channels))
     self.test_client.post(
         '/pubsub/push', query_string=request_params, data=request_data)
     email_content = email_message.call_args.kwargs['html']
@@ -110,11 +112,26 @@ class MainTest(parameterized.TestCase):
     self.testbed.setup_env(USE_LOCAL_INVENTORY_ADS='False', overwrite=True)
     request_params = {'token': _DUMMY_PUBSUB_TOKEN}
     channels = (_CHANNEL_ONLINE,)
-    request_data = _create_pubsub_msg(channels)
+    request_data = (
+        _create_pubsub_msg(local_feeds_enabled=False, channels=channels))
     self.test_client.post(
         '/pubsub/push', query_string=request_params, data=request_data)
     email_content = email_message.call_args.kwargs['html']
     self.assertNotIn('Run Results for Local Inventory:', email_content)
+
+  @mock.patch('google.appengine.api.mail.EmailMessage')
+  def test_local_email_is_used_when_local_feeds_are_enabled(
+      self, email_message):
+    self.testbed.setup_env(USE_LOCAL_INVENTORY_ADS='True', overwrite=True)
+    request_params = {'token': _DUMMY_PUBSUB_TOKEN}
+    channels = (_CHANNEL_ONLINE,)
+    request_data = (
+        _create_pubsub_msg(local_feeds_enabled=True, channels=channels))
+    self.test_client.post(
+        '/pubsub/push', query_string=request_params, data=request_data)
+    email_content = email_message.call_args.kwargs['html']
+    self.assertIn('Local Product Inventory Feed Processing Completed',
+                  email_content)
 
   def test_pubsub_push_failure(self):
     request_params = {'token': 'wrongtoken'}
@@ -123,8 +140,8 @@ class MainTest(parameterized.TestCase):
     self.assertEqual(_HTTP_UNAUTHORIZED, response.status_code)
 
 
-def _create_pubsub_msg(channels=(_CHANNEL_ONLINE,)):
-  # Create PubSub message main body
+def _create_pubsub_msg(local_feeds_enabled: bool, channels=(_CHANNEL_ONLINE,)):
+  """Helper function to setup the PubSub message that triggers the mailer."""
   content_api_result_in_list = []
   for channel in channels:
     for operation in (_OPERATION_UPSERT, _OPERATION_DELETE,
@@ -137,15 +154,18 @@ def _create_pubsub_msg(channels=(_CHANNEL_ONLINE,)):
           _KEY_SKIPPED_COUNT: _DUMMY_SKIPPED_COUNT
       })
   content_api_result_in_string = json.dumps(content_api_result_in_list)
-  # Wrap main body in PubSub message wrapper
+
+  # Wrap main body in PubSub message wrapper.
   expected_publish_message = {
       'message': {
           'attributes': {
               'content_api_results': content_api_result_in_string,
+              'local_feeds_enabled': local_feeds_enabled
           }
       }
   }
-  # Encode message as JSON string
+
+  # Encode message as JSON string.
   encoded_publish_message = json.dumps(expected_publish_message)
   return encoded_publish_message
 
