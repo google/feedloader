@@ -236,7 +236,7 @@ print_green "Creating BigQuery datasets and tables..."
 CreateBQTables() {
   local BQ_FEED_DATASET=$1
   local BQ_MONITOR_DATASET=$2
-  # If NEED_EXPIRATION_TABLE is True, the expiration related tables are created.
+  # If NEED_EXPIRATION_TABLE is true, the expiration related tables are created.
   # Otherwise, they are not created. This logic is needed because local
   # inventory feed does not have expiration.
   local NEED_EXPIRATION_TABLE=$3
@@ -323,10 +323,10 @@ CreateBQTables() {
       WHERE timestamp > FORMAT_DATETIME(\"%Y%m%d\", DATETIME_SUB(CURRENT_DATETIME(), INTERVAL 30 DAY))"
 }
 
-CreateBQTables "$BQ_FEED_DATASET" "$BQ_MONITOR_DATASET" "True"
+CreateBQTables "$BQ_FEED_DATASET" "$BQ_MONITOR_DATASET" true
 if echo "$ENABLE_LOCAL_INVENTORY_FEEDS"
 then
-  CreateBQTables "$BQ_FEED_DATASET_LOCAL" "$BQ_MONITOR_DATASET_LOCAL" "False"
+  CreateBQTables "$BQ_FEED_DATASET_LOCAL" "$BQ_MONITOR_DATASET_LOCAL" false
 fi
 
 # Create Cloud Pub/Sub topics
