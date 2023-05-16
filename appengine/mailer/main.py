@@ -24,7 +24,6 @@ import os
 import flask
 from google.appengine.api import app_identity
 from google.appengine.api import mail
-from typing import Any, Dict
 import jinja2
 import pytz
 
@@ -119,7 +118,7 @@ def pubsub_push():
   return 'OK!', httplib.OK
 
 
-def _extract_run_result(request_body) -> Dict[str, Any]:
+def _extract_run_result(request_body):
   """Extracts run results from the request body came from Cloud Pub/Sub.
 
   Args:
@@ -137,7 +136,7 @@ def _extract_run_result(request_body) -> Dict[str, Any]:
   return run_results_dict
 
 
-def _extract_local_feed_setting(request_body) -> bool:
+def _extract_local_feed_setting(request_body):
   """Extracts the boolean setting of whether local inventory feeds are enabled or not.
 
   Args:
