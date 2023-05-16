@@ -18,5 +18,5 @@ steps:
   dir: cloud_functions/trigger-monitor-dag-function
   args:
     - -c
-    - gcloud functions deploy trigger_dag --retry --timeout 540s --set-env-vars WEBSERVER_ID=${_AIRFLOW_WEBSERVER_ID},DAG_NAME=${_DAG_ID} --trigger-resource ${_TRIGGER_COMPLETION_BUCKET} --trigger-event google.storage.object.finalize --runtime python39
+    - gcloud functions deploy ${_CLOUD_FUNCTION_NAME} --retry --timeout 540s --set-env-vars WEBSERVER_ID=${_AIRFLOW_WEBSERVER_ID},DAG_NAME=${_DAG_ID} --trigger-resource ${_TRIGGER_COMPLETION_BUCKET} --trigger-event google.storage.object.finalize --runtime python39
 timeout: 3600s
