@@ -34,6 +34,20 @@ CREDENTIALS, _ = google.auth.default(scopes=[AUTH_SCOPE])
 def trigger_dag(
     event: Dict[str, Any], context: 'google.cloud.functions.Context'
 ) -> None:
+  """Entry point for the main feed (non-local) version of the Cloud Function."""
+  del context
+  post_to_composer(event)
+
+
+def trigger_dag_local(
+    event: Dict[str, Any], context: 'google.cloud.functions.Context'
+) -> None:
+  """Entry point for the local version of the Cloud Function."""
+  del context
+  post_to_composer(event)
+
+
+def post_to_composer(event: Dict[str, Any]) -> None:
   """Makes a POST request to the Composer DAG Trigger API.
 
   When called via Google Cloud Functions (GCF),
@@ -44,13 +58,10 @@ def trigger_dag(
       field contains a description of the event in the Cloud Storage
       `object` format described here:
       https://cloud.google.com/storage/docs/json_api/v1/objects#resource
-    context: Metadata of triggering event.
 
   Returns:
     None. The output is written to Cloud logging.
   """
-  del context
-
   webserver_id = os.environ.get('WEBSERVER_ID')
   dag_name = os.environ.get('DAG_NAME')
 
