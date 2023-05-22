@@ -85,19 +85,19 @@ if ! [[ $TIMEZONE_UTC_OFFSET =~ $TIMEZONE_REGEX ]]; then
 fi
 
 USE_LOCAL_INVENTORY_ADS=$(echo "$USE_LOCAL_INVENTORY_ADS" | awk '{print toupper(substr($0,0,1))tolower(substr($0,2))}')
-if ! [[ "${USE_LOCAL_INVENTORY_ADS}" -eq "True" || "${USE_LOCAL_INVENTORY_ADS}" -eq "False" ]]; then
+if ! [[ "${USE_LOCAL_INVENTORY_ADS}" = "True" || "${USE_LOCAL_INVENTORY_ADS}" = "False" ]]; then
   print_green "USE_LOCAL_INVENTORY_ADS must be set to a value of True or False. Please set this variable and try running this script again."
   exit 1
 fi
 
 IS_MCA=$(echo "$IS_MCA" | awk '{print toupper(substr($0,0,1))tolower(substr($0,2))}')
-if ! [[ "${IS_MCA}" -eq "True" || "${IS_MCA}" -eq "False" ]]; then
+if ! [[ "${IS_MCA}" = "True" || "${IS_MCA}" = "False" ]]; then
   print_green "IS_MCA must be set to a value of True or False. Please set this variable and try running this script again."
   exit 1
 fi
 
 SHOPTIMIZER_INTEGRATION_ON=$(echo "$SHOPTIMIZER_INTEGRATION_ON" | awk '{print toupper(substr($0,0,1))tolower(substr($0,2))}')
-if ! [[ "${SHOPTIMIZER_API_INTEGRATION_ON}" -eq "True" || "${SHOPTIMIZER_API_INTEGRATION_ON}" -eq "False" ]]; then
+if ! [[ "${SHOPTIMIZER_API_INTEGRATION_ON}" = "True" || "${SHOPTIMIZER_API_INTEGRATION_ON}" = "False" ]]; then
   print_green "SHOPTIMIZER_API_INTEGRATION_ON must be set to a value of True or False. Please set this variable and try running this script again."
   exit 1
 fi
