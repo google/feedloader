@@ -102,6 +102,18 @@ if ! [[ "${SHOPTIMIZER_API_INTEGRATION_ON}" -eq "True" || "${SHOPTIMIZER_API_INT
   exit 1
 fi
 
+ENABLE_LOCAL_INVENTORY_FEEDS=$(echo "$ENABLE_LOCAL_INVENTORY_FEEDS" | awk '{print toupper(substr($0,0,1))tolower(substr($0,2))}')
+if ! [[ "${ENABLE_LOCAL_INVENTORY_FEEDS}" = "True" || "${ENABLE_LOCAL_INVENTORY_FEEDS}" = "False" ]]; then
+  print_green "ENABLE_LOCAL_INVENTORY_FEEDS must be set to a value of True or False. Please set this variable and try running this script again."
+  exit 1
+fi
+
+# Validate the relationship between feed type and ads type.
+if [[ "${USE_LOCAL_INVENTORY_ADS}" = "False" && "${ENABLE_LOCAL_INVENTORY_FEEDS}" = "True" ]]; then
+  print_green "USE_LOCAL_INVENTORY_ADS must be set to True if ENABLE_LOCAL_INVENTORY_FEEDS is True. Please set these variables correctly and try running this script again."
+  exit 1
+fi
+
 # Authorize with a Google Account.
 gcloud auth login
 
