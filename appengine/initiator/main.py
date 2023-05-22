@@ -161,10 +161,14 @@ def start() -> Tuple[str, http.HTTPStatus]:
       )
       any_task_started = True
     if task.expiring_count > 0 and not local_inventory_feed_enabled:
-      _create_processing_table(_TABLE_SUFFIX_PREVENT_EXPIRING,
-                               _QUERY_FILEPATH_FOR_PREVENT_EXPIRING, timestamp)
-      _create_tasks_in_cloud_tasks(_TARGET_URL_PREVENT_EXPIRING,
-                                   task.expiring_count, timestamp)
+      _create_processing_table(
+          _TABLE_SUFFIX_PREVENT_EXPIRING,
+          _QUERY_FILEPATH_FOR_PREVENT_EXPIRING,
+          timestamp,
+      )
+      _create_tasks_in_cloud_tasks(
+          _TARGET_URL_PREVENT_EXPIRING, task.expiring_count, timestamp
+      )
       any_task_started = True
   except TypeError:
     logging.exception('An invalid numeric value was provided.')
@@ -195,7 +199,7 @@ def start() -> Tuple[str, http.HTTPStatus]:
   else:
     # No processing required, so just clean up and send an email.
     _cleanup(local_inventory_feed_enabled)
-    _trigger_mailer_for_nothing_processed()
+    _trigger_mailer_for_nothing_processed(local_inventory_feed_enabled)
   logging.info('Initiator has successfully finished!')
   return 'OK', http.HTTPStatus.OK
 
@@ -354,8 +358,9 @@ def _delete_eof_lock(local_inventory_feed_enabled: bool) -> None:
   gcs_client.delete_eof_lock()
 
 
-def _trigger_mailer_for_nothing_processed() -> None:
-  """Sends a completion email showing 0 upsert/deletion/expiring calls (sent when no diff)."""
+def _trigger_mailer_for_nothing_processed(
+    local_inventory_feed_enabled: bool) -> None:
+  """Sends a completion email showing for the case when there was no diff."""
   project_id = _load_environment_variable('PROJECT_ID')
   pubsub_publisher = pubsub_client.PubSubClient.from_service_account_json(
       _SERVICE_ACCOUNT)
@@ -363,8 +368,10 @@ def _trigger_mailer_for_nothing_processed() -> None:
       operation: operation_counts.OperationCounts(operation, 0, 0, 0)
       for operation in OPERATIONS
   }
-  pubsub_publisher.trigger_result_email(project_id, _MAILER_TOPIC_NAME,
-                                        operation_counts_dict)
+  pubsub_publisher.trigger_result_email(project_id,
+                                        _MAILER_TOPIC_NAME,
+                                        operation_counts_dict,
+                                        local_inventory_feed_enabled)
 
 
 def _load_environment_variable(key: str) -> str:

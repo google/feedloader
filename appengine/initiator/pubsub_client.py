@@ -76,7 +76,8 @@ class PubSubClient(object):
 
   def trigger_result_email(
       self, project_id: str, topic_name: str,
-      operation_counts_dict: Mapping[str, operation_counts.OperationCounts]
+      operation_counts_dict: Mapping[str, operation_counts.OperationCounts],
+      local_inventory_feed_enabled: bool
   ) -> None:
     """Publishes a message to PubSub to trigger the mailer service.
 
@@ -85,6 +86,8 @@ class PubSubClient(object):
       topic_name: The PubSub topic ID that triggers the mailer
       operation_counts_dict: A mapping of operations to success/failure/skipped
         counts
+      local_inventory_feed_enabled: Whether local inventory feeds are enabled
+        or not.
     """
     topic = f'projects/{project_id}/topics/{topic_name}'
     message = {
@@ -92,7 +95,8 @@ class PubSubClient(object):
             'content_api_results':
                 json.dumps(
                     operation_counts_dict,
-                    default=_convert_operation_counts_into_json)
+                    default=_convert_operation_counts_into_json),
+            'local_inventory_feed_enabled': local_inventory_feed_enabled,
         }
     }
     try:

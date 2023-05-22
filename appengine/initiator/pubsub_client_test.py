@@ -91,6 +91,7 @@ class PubsubClientTest(unittest.TestCase):
     expected_message = {
         'attributes': {
             'content_api_results': expected_operation_count_str,
+            'local_inventory_feed_enabled': False,
         }
     }
     encoded_expected_message = json.dumps(expected_message).encode('utf-8')

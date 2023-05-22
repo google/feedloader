@@ -428,8 +428,8 @@ class MainTest(unittest.TestCase):
                      response.status_code)
 
   def test_items_table_deleted_when_task_creation_fails(self):
-    self.tasks_client.return_value.push_tasks.side_effect = exceptions.GoogleCloudError(
-        'Dummy message')
+    self.tasks_client.return_value.push_tasks.side_effect = (
+        exceptions.GoogleCloudError('Dummy message'))
     headers = _build_headers_for_start()
     request_body = _build_request_body_for_start(
         delete_count=_DUMMY_DELETE_COUNT,
@@ -443,8 +443,8 @@ class MainTest(unittest.TestCase):
                      response.status_code)
 
   def test_eof_deleted_when_task_creation_fails(self):
-    self.tasks_client.return_value.push_tasks.side_effect = exceptions.GoogleCloudError(
-        'Dummy message')
+    self.tasks_client.return_value.push_tasks.side_effect = (
+        exceptions.GoogleCloudError('Dummy message'))
     headers = _build_headers_for_start()
     request_body = _build_request_body_for_start(
         delete_count=_DUMMY_DELETE_COUNT,
