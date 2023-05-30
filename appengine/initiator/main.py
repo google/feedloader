@@ -195,7 +195,7 @@ def start() -> Tuple[str, http.HTTPStatus]:
     return 'Authorization failed.', http.HTTPStatus.INTERNAL_SERVER_ERROR
   # Trigger monitoring cloud composer only when items are sent.
   if any_task_started:
-    _trigger_monitoring_cloud_composer()
+    _trigger_monitoring_cloud_composer(local_inventory_feed_enabled)
   else:
     # No processing required, so just clean up and send an email.
     _cleanup(local_inventory_feed_enabled)
@@ -306,10 +306,15 @@ def _create_tasks_in_cloud_tasks(
         channel=_CHANNEL_ONLINE)
 
 
-def _trigger_monitoring_cloud_composer() -> None:
+def _trigger_monitoring_cloud_composer(
+    local_inventory_feed_enabled: bool,
+) -> None:
   """Triggers the monitoring application."""
   trigger_completion_bucket = (
       _load_environment_variable('TRIGGER_COMPLETION_BUCKET'))
+
+  if local_inventory_feed_enabled:
+    trigger_completion_bucket += LOCAL_SUFFIX
   gcs_client = storage_client.StorageClient.from_service_account_json(
       _SERVICE_ACCOUNT, trigger_completion_bucket)
   gcs_client.upload_eof()
