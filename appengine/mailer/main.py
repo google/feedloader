@@ -26,6 +26,7 @@ from google.appengine.api import app_identity
 from google.appengine.api import mail
 import jinja2
 import pytz
+from typing import Any, Dict, List, Tuple
 
 from models import run_result
 
@@ -52,12 +53,12 @@ _USE_LOCAL_INVENTORY_ADS = 'USE_LOCAL_INVENTORY_ADS'
 
 
 @app.route('/health', methods=['GET'])
-def start():
+def start() -> Tuple[str, str]:
   return 'OK', httplib.OK
 
 
 @app.route('/pubsub/push', methods=['POST'])
-def pubsub_push():
+def pubsub_push() -> Tuple[str, str]:
   """Validates the request came from pubsub and sends the completion email."""
   if flask.request.args.get('token') != _load_environment_variable(
       _PUBSUB_VERIFICATION_TOKEN):
@@ -118,7 +119,7 @@ def pubsub_push():
   return 'OK!', httplib.OK
 
 
-def _extract_run_result(request_body):
+def _extract_run_result(request_body: Dict[str, Any]) -> Dict[str, Any]:
   """Extracts run results from the request body came from Cloud Pub/Sub.
 
   Args:
@@ -136,8 +137,8 @@ def _extract_run_result(request_body):
   return run_results_dict
 
 
-def _extract_local_feed_setting(request_body):
-  """Extracts the boolean setting of whether local inventory feeds are enabled or not.
+def _extract_local_feed_setting(request_body: Dict[str, Any]) -> bool:
+  """Extracts whether local inventory feeds are enabled or not as a bool.
 
   Args:
     request_body: The request body dict that came from Cloud Pub/Sub.
@@ -145,15 +146,17 @@ def _extract_local_feed_setting(request_body):
   Returns:
     A boolean representing the state of the local feed setting.
   """
-  local_feeds_enabled = (
+  local_inventory_feed_enabled = (
       request_body.get('message', {})
       .get('attributes', {})
-      .get('local_feeds_enabled', False)
+      .get('local_inventory_feed_enabled', False)
   )
-  return bool(local_feeds_enabled)
+  return bool(local_inventory_feed_enabled)
 
 
-def _get_run_result_list(run_results_dict):
+def _get_run_result_list(
+    run_results_dict: Dict[str, Any]
+) -> Dict[str, run_result.RunResult]:
   """Converts run results from a dictionary to a list of run_result objects.
 
   Args:
@@ -186,23 +189,23 @@ def _get_run_result_list(run_results_dict):
   return run_results
 
 
-def _get_channels():
+def _get_channels() -> List[str]:
   """Returns a list of Shopping channels based on the environment value."""
   return ['online', 'local'] if _use_local_inventory_ads() else ['online']
 
 
-def _project_id():
+def _project_id() -> str:
   """Returns project id."""
   return app_identity.get_application_id()
 
 
-def _use_local_inventory_ads():
+def _use_local_inventory_ads() -> bool:
   """Returns boolean value of whether to use local channel or not."""
   use_local_inventory_ads = _load_environment_variable(_USE_LOCAL_INVENTORY_ADS)
   return True if use_local_inventory_ads.lower() == 'true' else False
 
 
-def _load_environment_variable(key):
+def _load_environment_variable(key) -> str:
   """Returns a value of environment variable."""
   return os.getenv(key)
 

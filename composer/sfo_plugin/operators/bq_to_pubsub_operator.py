@@ -95,7 +95,7 @@ def _generate_query_string(filepath: str, project_id: str, dataset_id: str,
 
 
 class GetRunResultsAndTriggerReportingOperator(models.BaseOperator):
-  """Airflow operator to read process result from BigQuery and send it to Cloud Pub/Sub."""
+  """Reads BigQuery results and sends it to Cloud Pub/Sub."""
 
   def __init__(self, project_id: str, dataset_id: str, table_id: str,
                query_file_path: str, topic_name: str, *args, **kwargs) -> None:
@@ -136,15 +136,24 @@ class GetRunResultsAndTriggerReportingOperator(models.BaseOperator):
       results = self._load_run_results_from_bigquery(self._query_file_path)
     except BigQueryAPICallError as bq_api_error:
       raise airflow.AirflowException(
-          'Failed to call BigQuery API') from bq_api_error
+          'Failed to call BigQuery API'
+      ) from bq_api_error
     try:
-      self._send_run_results_to_pubsub(results)
+      logging.info(
+          'Composer was triggered by EOF upload to bucket: %s',
+          context['dag_run'].conf['bucket'],
+      )
+      self._send_run_results_to_pubsub(
+          results, context['dag_run'].conf['bucket']
+      )
     except PubSubAPICallError as pubsub_api_error:
       raise airflow.AirflowException(
-          'Failed to call Cloud Pub/Sub API') from pubsub_api_error
+          'Failed to call Cloud Pub/Sub API'
+      ) from pubsub_api_error
 
-  def _load_run_results_from_bigquery(self,
-                                      query_file_path: str) -> List[RunResult]:
+  def _load_run_results_from_bigquery(
+      self, query_file_path: str
+  ) -> List[RunResult]:
     """Reads process result from BigQuery and return it as a dictionary.
 
     Args:
@@ -177,34 +186,43 @@ class GetRunResultsAndTriggerReportingOperator(models.BaseOperator):
           operation=row[_KEY_OPERATION],
           success_count=row[_KEY_SUCCESS_COUNT],
           failure_count=row[_KEY_FAILURE_COUNT],
-          skipped_count=row[_KEY_SKIPPED_COUNT])
+          skipped_count=row[_KEY_SKIPPED_COUNT],
+      )
       results.append(result)
     return results
 
-  def _send_run_results_to_pubsub(self, results: Mapping[str,
-                                                         RunResult]) -> None:
+  def _send_run_results_to_pubsub(
+      self, results: Mapping[str, RunResult], bucket_name: str
+  ) -> None:
     """Sends process result to Cloud Pub/Sub.
 
     Args:
       results: Results of Content API calls in a run.
+      bucket_name: The name of the GCS bucket that triggered Cloud Composer.
 
     Raises:
       PubSubAPICallError: an error occurs when Cloud Pub/Sub API call failed.
     """
+    # Determine if this needs to trigger the Local Feed mail notification.
+    local_inventory_feed_enabled = 'local' in bucket_name
     message = {
         'attributes': {
             'content_api_results': json.dumps(
                 results, default=_convert_run_result_into_json
-            )
+            ),
+            'local_inventory_feed_enabled': str(local_inventory_feed_enabled)
         }
     }
+
     pubsub_hook = gcp_pubsub_hook.PubSubHook()
+
     try:
       pubsub_hook.publish(
           project_id=self._project_id,
           topic=self._topic_name,
           messages=[message],
       )
+
       logging.info(
           (
               'Cloud Pub/Sub message was successfully sent to'

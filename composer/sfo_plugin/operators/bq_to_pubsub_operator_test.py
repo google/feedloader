@@ -18,7 +18,7 @@
 import datetime
 import json
 import unittest
-import unittest.mock as mock
+from unittest import mock
 
 import airflow
 from airflow import models
@@ -35,6 +35,7 @@ DATASET_ID = 'test_dataset'
 TABLE_ID = 'test_table'
 QUERY_FILE_PATH = 'sfo_plugin/operators/queries/dummy_query.sql'
 TOPIC_NAME = 'test-topic'
+LOCAL_FEEDS_ENABLED = 'True'
 
 DUMMY_INSERT_SUCCESS = 1
 DUMMY_INSERT_FAILURE = 2
@@ -60,31 +61,62 @@ KEY_FAILURE_COUNT = 'failure_count'
 KEY_SKIPPED_COUNT = 'skipped_count'
 
 BQ_COLUMNS = [
-    KEY_CHANNEL, KEY_OPERATION, KEY_SUCCESS_COUNT, KEY_FAILURE_COUNT,
-    KEY_SKIPPED_COUNT
+    KEY_CHANNEL,
+    KEY_OPERATION,
+    KEY_SUCCESS_COUNT,
+    KEY_FAILURE_COUNT,
+    KEY_SKIPPED_COUNT,
 ]
 
-DUMMY_QUERY_RESULTS_FOR_ONLINE = ([
-    CHANNEL_ONLINE, OPERATION_UPSERT, DUMMY_INSERT_SUCCESS,
-    DUMMY_INSERT_FAILURE, DUMMY_INSERT_SKIPPED
-], [
-    CHANNEL_ONLINE, OPERATION_DELETE, DUMMY_DELETE_SUCCESS,
-    DUMMY_DELETE_FAILURE, DUMMY_DELETE_SKIPPED
-], [
-    CHANNEL_ONLINE, OPERATION_PREVENT_EXPIRING, DUMMY_PREVENT_EXPIRING_SUCCESS,
-    DUMMY_PREVENT_EXPIRING_FAILURE, DUMMY_PREVENT_EXPIRING_SKIPPED
-])
-DUMMY_QUERY_RESULTS_FOR_LOCAL = ([
-    CHANNEL_LOCAL, OPERATION_UPSERT, DUMMY_INSERT_SUCCESS, DUMMY_INSERT_FAILURE,
-    DUMMY_INSERT_SKIPPED
-], [
-    CHANNEL_LOCAL, OPERATION_DELETE, DUMMY_DELETE_SUCCESS, DUMMY_DELETE_FAILURE,
-    DUMMY_DELETE_SKIPPED
-], [
-    CHANNEL_LOCAL, OPERATION_PREVENT_EXPIRING, DUMMY_PREVENT_EXPIRING_SUCCESS,
-    DUMMY_PREVENT_EXPIRING_FAILURE, DUMMY_PREVENT_EXPIRING_SKIPPED
-])
-DUMMY_QUERY_RESULTS_FOR_BOTH_ONLINE_AND_LOCAL = DUMMY_QUERY_RESULTS_FOR_ONLINE + DUMMY_QUERY_RESULTS_FOR_LOCAL
+DUMMY_QUERY_RESULTS_FOR_ONLINE = (
+    [
+        CHANNEL_ONLINE,
+        OPERATION_UPSERT,
+        DUMMY_INSERT_SUCCESS,
+        DUMMY_INSERT_FAILURE,
+        DUMMY_INSERT_SKIPPED,
+    ],
+    [
+        CHANNEL_ONLINE,
+        OPERATION_DELETE,
+        DUMMY_DELETE_SUCCESS,
+        DUMMY_DELETE_FAILURE,
+        DUMMY_DELETE_SKIPPED,
+    ],
+    [
+        CHANNEL_ONLINE,
+        OPERATION_PREVENT_EXPIRING,
+        DUMMY_PREVENT_EXPIRING_SUCCESS,
+        DUMMY_PREVENT_EXPIRING_FAILURE,
+        DUMMY_PREVENT_EXPIRING_SKIPPED,
+    ],
+)
+DUMMY_QUERY_RESULTS_FOR_LOCAL = (
+    [
+        CHANNEL_LOCAL,
+        OPERATION_UPSERT,
+        DUMMY_INSERT_SUCCESS,
+        DUMMY_INSERT_FAILURE,
+        DUMMY_INSERT_SKIPPED,
+    ],
+    [
+        CHANNEL_LOCAL,
+        OPERATION_DELETE,
+        DUMMY_DELETE_SUCCESS,
+        DUMMY_DELETE_FAILURE,
+        DUMMY_DELETE_SKIPPED,
+    ],
+    [
+        CHANNEL_LOCAL,
+        OPERATION_PREVENT_EXPIRING,
+        DUMMY_PREVENT_EXPIRING_SUCCESS,
+        DUMMY_PREVENT_EXPIRING_FAILURE,
+        DUMMY_PREVENT_EXPIRING_SKIPPED,
+    ],
+)
+DUMMY_QUERY_RESULTS_FOR_BOTH_ONLINE_AND_LOCAL = (
+    DUMMY_QUERY_RESULTS_FOR_ONLINE + DUMMY_QUERY_RESULTS_FOR_LOCAL
+)
 
 
 class GetRunResultsAndTriggerReportingTest(unittest.TestCase):
@@ -167,7 +199,9 @@ class GetRunResultsAndTriggerReportingTest(unittest.TestCase):
     }]
     bq_result = pd.DataFrame(data=dummy_query_results, columns=BQ_COLUMNS)
     self._mock_bq_hook.return_value.get_pandas_df.return_value = bq_result
+
     self._task.execute(self._context)
+
     self._mock_pubsub_hook.return_value.publish.assert_called_with(
         project_id=PROJECT_ID,
         topic=TOPIC_NAME,
@@ -185,59 +219,82 @@ class GetRunResultsAndTriggerReportingTest(unittest.TestCase):
         dag=self._dag,
         task_id=TASK_ID + '_test_execute_with_non_existing_query_file_path',
     )
+
     with self.assertRaises(airflow.AirflowException):
       task.execute(self._context)
+
     self._mock_pubsub_hook.return_value.publish.assert_not_called()
 
   def test_execute_with_pubsub_error(self):
     bq_result = pd.DataFrame(
-        data=DUMMY_QUERY_RESULTS_FOR_ONLINE, columns=BQ_COLUMNS)
-    self._mock_bq_hook.return_value.get_pandas_df.return_value = bq_result
-    self._mock_pubsub_hook.return_value.publish.side_effect = gcp_pubsub_hook.PubSubException(
+        data=DUMMY_QUERY_RESULTS_FOR_ONLINE, columns=BQ_COLUMNS
     )
+    self._mock_bq_hook.return_value.get_pandas_df.return_value = bq_result
+    self._mock_pubsub_hook.return_value.publish.side_effect = (
+        gcp_pubsub_hook.PubSubException()
+    )
+
     with self.assertRaises(airflow.AirflowException):
       self._task.execute(self._context)
 
   def test_load_result_from_bigquery_when_query_result_has_three_operations(
-      self):
+      self,
+  ):
     bq_result = pd.DataFrame(
-        data=DUMMY_QUERY_RESULTS_FOR_ONLINE, columns=BQ_COLUMNS)
+        data=DUMMY_QUERY_RESULTS_FOR_ONLINE, columns=BQ_COLUMNS
+    )
     self._mock_bq_hook.return_value.get_pandas_df.return_value = bq_result
     results = self._task._load_run_results_from_bigquery(QUERY_FILE_PATH)
-    insert_result = bq_to_pubsub_operator.RunResult(CHANNEL_ONLINE,
-                                                    OPERATION_UPSERT,
-                                                    DUMMY_INSERT_SUCCESS,
-                                                    DUMMY_INSERT_FAILURE,
-                                                    DUMMY_INSERT_SKIPPED)
-    delete_result = bq_to_pubsub_operator.RunResult(CHANNEL_ONLINE,
-                                                    OPERATION_DELETE,
-                                                    DUMMY_DELETE_SUCCESS,
-                                                    DUMMY_DELETE_FAILURE,
-                                                    DUMMY_DELETE_SKIPPED)
+
+    insert_result = bq_to_pubsub_operator.RunResult(
+        CHANNEL_ONLINE,
+        OPERATION_UPSERT,
+        DUMMY_INSERT_SUCCESS,
+        DUMMY_INSERT_FAILURE,
+        DUMMY_INSERT_SKIPPED,
+    )
+    delete_result = bq_to_pubsub_operator.RunResult(
+        CHANNEL_ONLINE,
+        OPERATION_DELETE,
+        DUMMY_DELETE_SUCCESS,
+        DUMMY_DELETE_FAILURE,
+        DUMMY_DELETE_SKIPPED,
+    )
     prevent_expiring_result = bq_to_pubsub_operator.RunResult(
-        CHANNEL_ONLINE, OPERATION_PREVENT_EXPIRING,
-        DUMMY_PREVENT_EXPIRING_SUCCESS, DUMMY_PREVENT_EXPIRING_FAILURE,
-        DUMMY_PREVENT_EXPIRING_SKIPPED)
+        CHANNEL_ONLINE,
+        OPERATION_PREVENT_EXPIRING,
+        DUMMY_PREVENT_EXPIRING_SUCCESS,
+        DUMMY_PREVENT_EXPIRING_FAILURE,
+        DUMMY_PREVENT_EXPIRING_SKIPPED,
+    )
+
     self.assertListEqual(
-        [insert_result, delete_result, prevent_expiring_result], results)
+        [insert_result, delete_result, prevent_expiring_result], results
+    )
 
   def test_load_result_from_bigquery_when_query_result_has_one_operation(self):
     query_result_list = [DUMMY_QUERY_RESULTS_FOR_ONLINE[0]]
     bq_result = pd.DataFrame(data=query_result_list, columns=BQ_COLUMNS)
     self._mock_bq_hook.return_value.get_pandas_df.return_value = bq_result
     results = self._task._load_run_results_from_bigquery(QUERY_FILE_PATH)
-    insert_result = bq_to_pubsub_operator.RunResult(CHANNEL_ONLINE,
-                                                    OPERATION_UPSERT,
-                                                    DUMMY_INSERT_SUCCESS,
-                                                    DUMMY_INSERT_FAILURE,
-                                                    DUMMY_INSERT_SKIPPED)
+
+    insert_result = bq_to_pubsub_operator.RunResult(
+        CHANNEL_ONLINE,
+        OPERATION_UPSERT,
+        DUMMY_INSERT_SUCCESS,
+        DUMMY_INSERT_FAILURE,
+        DUMMY_INSERT_SKIPPED,
+    )
+
     self.assertListEqual([insert_result], results)
 
   def test_load_result_from_bigquery_when_query_result_is_empty(self):
     query_result_list = []
     bq_result = pd.DataFrame(data=query_result_list, columns=BQ_COLUMNS)
     self._mock_bq_hook.return_value.get_pandas_df.return_value = bq_result
+
     results = self._task._load_run_results_from_bigquery(QUERY_FILE_PATH)
+
     self.assertListEqual([], results)
 
   def test_load_result_with_non_existing_query_path(self):
@@ -253,7 +310,9 @@ class GetRunResultsAndTriggerReportingTest(unittest.TestCase):
                                             DUMMY_INSERT_FAILURE,
                                             DUMMY_INSERT_SKIPPED)
     }
+
     self._task._send_run_results_to_pubsub(results)
+
     self._mock_pubsub_hook.return_value.publish.assert_called()
 
 

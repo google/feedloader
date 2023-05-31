@@ -70,19 +70,20 @@ _LOCK_BUCKET = models.variable.Variable.get('LOCK_BUCKET')
 
 # File paths
 _SERVICE_ACCOUNT = '/home/airflow/gcs/data/config/service_account.json'
-_UPDATE_ITEMS_EXPIRATION_TRACKING_QUERY = 'queries/update_items_expiration_tracking.sql'
+_UPDATE_ITEMS_EXPIRATION_TRACKING_QUERY = (
+    'queries/update_items_expiration_tracking.sql'
+)
 
 _DEFAULT_DAG_ARGS = frozendict({
-    # Since this dag is not scheduled, setting start_date now.
+    # Since this DAG is not scheduled, setting start_date to now.
     'start_date': datetime.datetime.now(),
     'retries': 5,
-    'project_id': _PROJECT_ID
+    'project_id': _PROJECT_ID,
 })
 
 dag = models.DAG(
-    dag_id=_DAG_ID,
-    default_args=dict(_DEFAULT_DAG_ARGS),
-    schedule_interval=None)
+    dag_id=_DAG_ID, default_args=dict(_DEFAULT_DAG_ARGS), schedule_interval=None
+)
 
 _wait_for_completion = wait_for_completion_operator.WaitForCompletionOperator(
     task_id=_WAIT_FOR_COMPLETION_TASK,
@@ -124,4 +125,9 @@ _clean_up = clean_up_operator.CleanUpOperator(
     bucket_id=_LOCK_BUCKET,
 )
 
-_wait_for_completion >> _update_expiration_tracking >> _bq_to_pubsub >> _clean_up  
+(  
+    _wait_for_completion
+    >> _update_expiration_tracking
+    >> _bq_to_pubsub
+    >> _clean_up
+)

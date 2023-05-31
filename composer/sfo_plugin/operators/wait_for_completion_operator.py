@@ -29,8 +29,16 @@ _SECONDS_TO_WAIT = 60
 class WaitForCompletionOperator(models.BaseOperator):
   """Airflow operator waiting for the process completion by checking if the Cloud Tasks queue is empty."""
 
-  def __init__(self, project_id, queue_location, queue_name,
-               service_account_path, try_count_limit, *args, **kwargs):
+  def __init__(
+      self,
+      project_id: str,
+      queue_location: str,
+      queue_name: str,
+      service_account_path: str,
+      try_count_limit: int,
+      *args,
+      **kwargs,
+  ) -> None:
     """Inits WaitForCompletionOperator.
 
     Args:
@@ -47,10 +55,10 @@ class WaitForCompletionOperator(models.BaseOperator):
     self._project_id = project_id
     self._queue_location = queue_location
     self._queue_name = queue_name
-    self._service_acount_path = service_account_path
+    self._service_account_path = service_account_path
     self._try_count_limit = try_count_limit
 
-  def execute(self, context):
+  def execute(self, context: object) -> None:
     """Executes operator.
 
     This method is invoked by Airflow to wait for the process completion by
@@ -59,26 +67,33 @@ class WaitForCompletionOperator(models.BaseOperator):
     Args:
       context: Airflow context that contains references to related objects to
         the task instance.
+
     Exceptions:
       airflow.AirflowException: Raised when Cloud Tasks API call failed or try
         count exceeds the limit. It stops Airflow workflow.
     """
     tasks_client = tasks.CloudTasksClient.from_service_account_json(
-        self._service_acount_path)
+        self._service_account_path
+    )
     parent = tasks_client.queue_path(
         project=self._project_id,
         location=self._queue_location,
-        queue=self._queue_name)
+        queue=self._queue_name,
+    )
     for _ in range(self._try_count_limit):
       try:
         task_list = list(tasks_client.list_tasks(parent=parent))
-      except (exceptions.GoogleAPICallError,
-              exceptions.RetryError) as api_error:
+      except (
+          exceptions.GoogleAPICallError,
+          exceptions.RetryError,
+      ) as api_error:
         raise airflow.AirflowException(
-            'Cloud Tasks API called failed') from api_error
+            'Cloud Tasks API called failed'
+        ) from api_error
       except ValueError as value_error:
         raise airflow.AirflowException(
-            'Cloud Tasks API call has invalid parameters') from value_error
+            'Cloud Tasks API call has invalid parameters'
+        ) from value_error
       if not task_list:
         # This task is done. Move to the next task.
         logging.debug('Queue is empty. Moving to the next task')
@@ -87,4 +102,5 @@ class WaitForCompletionOperator(models.BaseOperator):
       time.sleep(_SECONDS_TO_WAIT)
     logging.error('The number of try exceeded the limit')
     raise airflow.AirflowException(
-        'The number of try exceeded the limit. Stopping Airflow workflow')
+        'The number of try exceeded the limit. Stopping Airflow workflow'
+    )
