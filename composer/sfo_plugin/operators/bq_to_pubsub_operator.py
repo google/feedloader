@@ -53,18 +53,27 @@ def _convert_run_result_into_json(result: RunResult) -> Dict[str, Any]:
   Returns:
     JSON-encodable dict to be included in a Pub/Sub message.
   """
+  logging.info(
+      'Creating result dictionary for PubSub: %s, %s, %s, %s, %s',
+      result.channel,
+      result.operation,
+      result.success_count,
+      result.failure_count,
+      result.skipped_count,
+  )
   result_dict = {
       _KEY_CHANNEL: result.channel,
       _KEY_OPERATION: result.operation,
       _KEY_SUCCESS_COUNT: result.success_count,
       _KEY_FAILURE_COUNT: result.failure_count,
-      _KEY_SKIPPED_COUNT: result.skipped_count
+      _KEY_SKIPPED_COUNT: result.skipped_count,
   }
   return result_dict
 
 
-def _generate_query_string(filepath: str, project_id: str, dataset_id: str,
-                           table_id: str) -> str:
+def _generate_query_string(
+    filepath: str, project_id: str, dataset_id: str, table_id: str
+) -> str:
   """Generates string format of a query.
 
   Args:
@@ -131,20 +140,29 @@ class GetRunResultsAndTriggerReportingOperator(models.BaseOperator):
     Raises:
       airflow.AirflowException: Raised when the task failed to call BigQuery
         API.
+      CloudFunctionsContextError: Raised when the triggering bucket name could
+        not be extracted.
     """
+    trigger_bucket = context['dag_run'].conf['bucket']
+    if not trigger_bucket:
+      raise CloudFunctionsContextError('Bucket could not be found in context.')
+
+    # Determine if this needs to trigger the Local Feed mail notification.
+    local_inventory_feed_enabled = 'local' in trigger_bucket
     try:
-      results = self._load_run_results_from_bigquery(self._query_file_path)
+      results = self._load_run_results_from_bigquery(
+          self._query_file_path, local_inventory_feed_enabled
+      )
+      logging.info('Results queried from BigQuery: %s', results)
     except BigQueryAPICallError as bq_api_error:
       raise airflow.AirflowException(
           'Failed to call BigQuery API'
       ) from bq_api_error
     try:
       logging.info(
-          'Composer was triggered by EOF upload to bucket: %s',
-          context['dag_run'].conf['bucket'],
-      )
+          'Composer was triggered by EOF upload to bucket: %s', trigger_bucket)
       self._send_run_results_to_pubsub(
-          results, context['dag_run'].conf['bucket']
+          results, local_inventory_feed_enabled
       )
     except PubSubAPICallError as pubsub_api_error:
       raise airflow.AirflowException(
@@ -152,12 +170,14 @@ class GetRunResultsAndTriggerReportingOperator(models.BaseOperator):
       ) from pubsub_api_error
 
   def _load_run_results_from_bigquery(
-      self, query_file_path: str
+      self, query_file_path: str, local_inventory_feed_enabled: bool
   ) -> List[RunResult]:
     """Reads process result from BigQuery and return it as a dictionary.
 
     Args:
       query_file_path: File path of the query to get the last result.
+      local_inventory_feed_enabled: True if local feeds are processed,
+        otherwise False.
 
     Returns:
       A dict including number of processed items loaded from BigQuery.
@@ -166,8 +186,14 @@ class GetRunResultsAndTriggerReportingOperator(models.BaseOperator):
       BigQueryAPICallError: an error occurs when BigQuery API call failed.
     """
     try:
-      query = _generate_query_string(query_file_path, self._project_id,
-                                     self._dataset_id, self._table_id)
+      dataset_id = (
+          f'{self._dataset_id}_local'
+          if local_inventory_feed_enabled
+          else self._dataset_id
+      )
+      query = _generate_query_string(
+          query_file_path, self._project_id, dataset_id, self._table_id
+      )
     except GenerateQueryError as query_error:
       logging.error('Query file does not exist: %s', query_error.filepath)
       raise BigQueryAPICallError(
@@ -192,28 +218,27 @@ class GetRunResultsAndTriggerReportingOperator(models.BaseOperator):
     return results
 
   def _send_run_results_to_pubsub(
-      self, results: Mapping[str, RunResult], bucket_name: str
+      self, results: Mapping[str, RunResult], local_inventory_feed_enabled: bool
   ) -> None:
     """Sends process result to Cloud Pub/Sub.
 
     Args:
       results: Results of Content API calls in a run.
-      bucket_name: The name of the GCS bucket that triggered Cloud Composer.
+      local_inventory_feed_enabled: True if local feeds are processed,
+        otherwise False.
 
     Raises:
       PubSubAPICallError: an error occurs when Cloud Pub/Sub API call failed.
     """
-    # Determine if this needs to trigger the Local Feed mail notification.
-    local_inventory_feed_enabled = 'local' in bucket_name
     message = {
         'attributes': {
             'content_api_results': json.dumps(
                 results, default=_convert_run_result_into_json
             ),
-            'local_inventory_feed_enabled': str(local_inventory_feed_enabled)
+            'local_inventory_feed_enabled': local_inventory_feed_enabled
         }
     }
-
+    logging.info('Message constructed for mailer: %s', message)
     pubsub_hook = gcp_pubsub_hook.PubSubHook()
 
     try:
@@ -272,4 +297,16 @@ class PubSubAPICallError(Exception):
 
   def __init__(self, message) -> None:
     super(PubSubAPICallError, self).__init__()
+    self.message = message
+
+
+class CloudFunctionsContextError(Exception):
+  """Raised when Cloud Functions failed to pass the context to Cloud Composer.
+
+  Attributes:
+    message: string, explanation of the error.
+  """
+
+  def __init__(self, message) -> None:
+    super(CloudFunctionsContextError, self).__init__()
     self.message = message

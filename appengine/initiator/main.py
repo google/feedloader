@@ -303,20 +303,27 @@ def _create_tasks_in_cloud_tasks(
         total_items=items_count,
         batch_size=_BATCH_SIZE,
         timestamp=timestamp,
-        channel=_CHANNEL_ONLINE)
+        channel=_CHANNEL_ONLINE,
+    )
 
 
 def _trigger_monitoring_cloud_composer(
     local_inventory_feed_enabled: bool,
 ) -> None:
   """Triggers the monitoring application."""
-  trigger_completion_bucket = (
-      _load_environment_variable('TRIGGER_COMPLETION_BUCKET'))
+  trigger_completion_bucket = _load_environment_variable(
+      'TRIGGER_COMPLETION_BUCKET'
+  )
 
   if local_inventory_feed_enabled:
     trigger_completion_bucket += LOCAL_SUFFIX
   gcs_client = storage_client.StorageClient.from_service_account_json(
-      _SERVICE_ACCOUNT, trigger_completion_bucket)
+      _SERVICE_ACCOUNT, trigger_completion_bucket
+  )
+  logging.info(
+      'Uploading EOF to bucket %s trigger monitoring in Cloud Composer...',
+      trigger_completion_bucket,
+  )
   gcs_client.upload_eof()
 
 

@@ -13,7 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Sends a notification of completion of the Shopping Feed uploader to the specified email destination."""
+
+"""Module that sends a completion email when Feedloader finishes all uploads."""
 
 import datetime
 import httplib
@@ -26,7 +27,6 @@ from google.appengine.api import app_identity
 from google.appengine.api import mail
 import jinja2
 import pytz
-from typing import Any, Dict, List, Tuple
 
 from models import run_result
 
@@ -53,15 +53,21 @@ _USE_LOCAL_INVENTORY_ADS = 'USE_LOCAL_INVENTORY_ADS'
 
 
 @app.route('/health', methods=['GET'])
-def start() -> Tuple[str, str]:
+def start():
   return 'OK', httplib.OK
 
 
 @app.route('/pubsub/push', methods=['POST'])
-def pubsub_push() -> Tuple[str, str]:
+def pubsub_push():
   """Validates the request came from pubsub and sends the completion email."""
+  logging.info('Feedloader Mailer triggered via POST to /pubsub/push')
   if flask.request.args.get('token') != _load_environment_variable(
-      _PUBSUB_VERIFICATION_TOKEN):
+      _PUBSUB_VERIFICATION_TOKEN
+  ):
+    logging.error(
+        'Request could not be authenticated with token %s',
+        flask.request.args.get('token'),
+    )
     return 'Unauthorized', httplib.UNAUTHORIZED
   request_body = json.loads(flask.request.data.decode('utf-8'))
   try:
@@ -74,6 +80,7 @@ def pubsub_push() -> Tuple[str, str]:
 
   total_items_processed = {}
   for channel in _get_channels():
+    logging.info('Calculating result counts for channel %s ', channel)
     total_items_processed[channel] = sum(
         result.get_total_count() for result in run_results.get(channel, []))
 
@@ -103,23 +110,28 @@ def pubsub_push() -> Tuple[str, str]:
   }
 
   if local_feeds_enabled:
+    logging.info('Sending mail for Local Feeds...')
     template = jinja_environment.get_template('completion_mail_local_feed.html')
     email_subject = 'Local Shopping Feed Processing Completed'
   else:
+    logging.info('Sending mail for non-local Feeds...')
     template = jinja_environment.get_template('completion_mail.html')
     email_subject = 'Shopping Feed Processing Completed'
 
   html_body = template.render(template_values)
+  email_to_address = _load_environment_variable(_EMAIL_TO)
+  logging.info('Attempting to send mail to destination: %s', email_to_address)
   message = mail.EmailMessage(
       sender='no-reply@{0}.appspotmail.com'.format(_project_id()),
       subject=email_subject,
-      to=_load_environment_variable(_EMAIL_TO),
+      to=email_to_address,
       html=html_body)
   message.send()
+  logging.info('Mail Send completed successfully to %s', email_to_address)
   return 'OK!', httplib.OK
 
 
-def _extract_run_result(request_body: Dict[str, Any]) -> Dict[str, Any]:
+def _extract_run_result(request_body):
   """Extracts run results from the request body came from Cloud Pub/Sub.
 
   Args:
@@ -137,7 +149,7 @@ def _extract_run_result(request_body: Dict[str, Any]) -> Dict[str, Any]:
   return run_results_dict
 
 
-def _extract_local_feed_setting(request_body: Dict[str, Any]) -> bool:
+def _extract_local_feed_setting(request_body):
   """Extracts whether local inventory feeds are enabled or not as a bool.
 
   Args:
@@ -154,9 +166,7 @@ def _extract_local_feed_setting(request_body: Dict[str, Any]) -> bool:
   return bool(local_inventory_feed_enabled)
 
 
-def _get_run_result_list(
-    run_results_dict: Dict[str, Any]
-) -> Dict[str, run_result.RunResult]:
+def _get_run_result_list(run_results_dict):
   """Converts run results from a dictionary to a list of run_result objects.
 
   Args:
@@ -189,26 +199,27 @@ def _get_run_result_list(
   return run_results
 
 
-def _get_channels() -> List[str]:
+def _get_channels():
   """Returns a list of Shopping channels based on the environment value."""
   return ['online', 'local'] if _use_local_inventory_ads() else ['online']
 
 
-def _project_id() -> str:
+def _project_id():
   """Returns project id."""
   return app_identity.get_application_id()
 
 
-def _use_local_inventory_ads() -> bool:
+def _use_local_inventory_ads():
   """Returns boolean value of whether to use local channel or not."""
   use_local_inventory_ads = _load_environment_variable(_USE_LOCAL_INVENTORY_ADS)
   return True if use_local_inventory_ads.lower() == 'true' else False
 
 
-def _load_environment_variable(key) -> str:
-  """Returns a value of environment variable."""
+def _load_environment_variable(key):
+  """Returns the value of the given environment variable key."""
   return os.getenv(key)
 
 
 if __name__ == '__main__':
   app.run(host='127.0.0.1', port=8080, debug=True)
+

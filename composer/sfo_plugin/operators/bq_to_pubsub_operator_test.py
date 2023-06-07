@@ -33,7 +33,7 @@ TASK_ID = 'test_task'
 PROJECT_ID = 'test-project'
 DATASET_ID = 'test_dataset'
 TABLE_ID = 'test_table'
-QUERY_FILE_PATH = 'sfo_plugin/operators/queries/dummy_query.sql'
+QUERY_FILE_PATH = 'queries/dummy_query.sql'
 TOPIC_NAME = 'test-topic'
 LOCAL_FEEDS_ENABLED = 'True'
 
@@ -119,6 +119,11 @@ DUMMY_QUERY_RESULTS_FOR_BOTH_ONLINE_AND_LOCAL = (
 )
 
 
+bucket_config = mock.Mock()
+bucket_config.conf = {'bucket': 'test-bucket-local'}
+mock_local_context = {'dag_run': bucket_config}
+
+
 class GetRunResultsAndTriggerReportingTest(unittest.TestCase):
 
   def setUp(self):
@@ -131,76 +136,101 @@ class GetRunResultsAndTriggerReportingTest(unittest.TestCase):
         query_file_path=QUERY_FILE_PATH,
         topic_name=TOPIC_NAME,
         dag=self._dag,
-        task_id=TASK_ID)
+        task_id=TASK_ID,
+    )
     self._context = mock.MagicMock()
     self._mock_bq_hook = mock.patch(
-        'airflow.contrib.hooks.bigquery_hook.BigQueryHook',
-        autospec=True).start()
+        'airflow.contrib.hooks.bigquery_hook.BigQueryHook', autospec=True
+    ).start()
     self._mock_pubsub_hook = mock.patch(
-        'airflow.contrib.hooks.gcp_pubsub_hook.PubSubHook',
-        autospec=True).start()
+        'airflow.contrib.hooks.gcp_pubsub_hook.PubSubHook', autospec=True
+    ).start()
     self.addCleanup(mock.patch.stopall)
 
-  @parameterized.expand([[3, DUMMY_QUERY_RESULTS_FOR_ONLINE],
-                         [6, DUMMY_QUERY_RESULTS_FOR_BOTH_ONLINE_AND_LOCAL]])
-  def test_execute_should_publish_message_to_pubsub(self,
-                                                    expected_results_length,
-                                                    dummy_query_results):
+  @parameterized.expand([
+      [
+          3,
+          DUMMY_QUERY_RESULTS_FOR_ONLINE,
+          mock.MagicMock(),
+          'online',
+          False,
+      ],
+      [
+          6,
+          DUMMY_QUERY_RESULTS_FOR_BOTH_ONLINE_AND_LOCAL,
+          mock.MagicMock(),
+          'online',
+          False,
+      ],
+      [3, DUMMY_QUERY_RESULTS_FOR_LOCAL, mock_local_context, 'local', True],
+  ])
+  def test_execute_should_publish_message_to_pubsub(
+      self,
+      expected_results_length,
+      dummy_query_results,
+      test_context,
+      channel,
+      local_feeds_enabled,
+  ):
     expected_content_api_results_list = [
         {
-            KEY_CHANNEL: CHANNEL_ONLINE,
+            KEY_CHANNEL: channel,
             KEY_OPERATION: OPERATION_UPSERT,
             KEY_SUCCESS_COUNT: DUMMY_INSERT_SUCCESS,
             KEY_FAILURE_COUNT: DUMMY_INSERT_FAILURE,
-            KEY_SKIPPED_COUNT: DUMMY_INSERT_SKIPPED
+            KEY_SKIPPED_COUNT: DUMMY_INSERT_SKIPPED,
         },
         {
-            KEY_CHANNEL: CHANNEL_ONLINE,
+            KEY_CHANNEL: channel,
             KEY_OPERATION: OPERATION_DELETE,
             KEY_SUCCESS_COUNT: DUMMY_DELETE_SUCCESS,
             KEY_FAILURE_COUNT: DUMMY_DELETE_FAILURE,
-            KEY_SKIPPED_COUNT: DUMMY_DELETE_SKIPPED
+            KEY_SKIPPED_COUNT: DUMMY_DELETE_SKIPPED,
         },
         {
-            KEY_CHANNEL: CHANNEL_ONLINE,
+            KEY_CHANNEL: channel,
             KEY_OPERATION: OPERATION_PREVENT_EXPIRING,
             KEY_SUCCESS_COUNT: DUMMY_PREVENT_EXPIRING_SUCCESS,
             KEY_FAILURE_COUNT: DUMMY_PREVENT_EXPIRING_FAILURE,
-            KEY_SKIPPED_COUNT: DUMMY_PREVENT_EXPIRING_SKIPPED
+            KEY_SKIPPED_COUNT: DUMMY_PREVENT_EXPIRING_SKIPPED,
         },
         {
             KEY_CHANNEL: CHANNEL_LOCAL,
             KEY_OPERATION: OPERATION_UPSERT,
             KEY_SUCCESS_COUNT: DUMMY_INSERT_SUCCESS,
             KEY_FAILURE_COUNT: DUMMY_INSERT_FAILURE,
-            KEY_SKIPPED_COUNT: DUMMY_INSERT_SKIPPED
+            KEY_SKIPPED_COUNT: DUMMY_INSERT_SKIPPED,
         },
         {
             KEY_CHANNEL: CHANNEL_LOCAL,
             KEY_OPERATION: OPERATION_DELETE,
             KEY_SUCCESS_COUNT: DUMMY_DELETE_SUCCESS,
             KEY_FAILURE_COUNT: DUMMY_DELETE_FAILURE,
-            KEY_SKIPPED_COUNT: DUMMY_DELETE_SKIPPED
+            KEY_SKIPPED_COUNT: DUMMY_DELETE_SKIPPED,
         },
         {
             KEY_CHANNEL: CHANNEL_LOCAL,
             KEY_OPERATION: OPERATION_PREVENT_EXPIRING,
             KEY_SUCCESS_COUNT: DUMMY_PREVENT_EXPIRING_SUCCESS,
             KEY_FAILURE_COUNT: DUMMY_PREVENT_EXPIRING_FAILURE,
-            KEY_SKIPPED_COUNT: DUMMY_PREVENT_EXPIRING_SKIPPED
+            KEY_SKIPPED_COUNT: DUMMY_PREVENT_EXPIRING_SKIPPED,
         },
     ]
     expected_content_api_results = json.dumps(
-        expected_content_api_results_list[:expected_results_length])
-    expected_publish_messages = [{
-        'attributes': {
-            'content_api_results': expected_content_api_results,
+        expected_content_api_results_list[:expected_results_length]
+    )
+    expected_publish_messages = [
+        {
+            'attributes': {
+                'content_api_results': expected_content_api_results,
+                'local_inventory_feed_enabled': local_feeds_enabled,
+            }
         }
-    }]
+    ]
     bq_result = pd.DataFrame(data=dummy_query_results, columns=BQ_COLUMNS)
     self._mock_bq_hook.return_value.get_pandas_df.return_value = bq_result
 
-    self._task.execute(self._context)
+    self._task.execute(test_context)
 
     self._mock_pubsub_hook.return_value.publish.assert_called_with(
         project_id=PROJECT_ID,
@@ -244,7 +274,7 @@ class GetRunResultsAndTriggerReportingTest(unittest.TestCase):
         data=DUMMY_QUERY_RESULTS_FOR_ONLINE, columns=BQ_COLUMNS
     )
     self._mock_bq_hook.return_value.get_pandas_df.return_value = bq_result
-    results = self._task._load_run_results_from_bigquery(QUERY_FILE_PATH)
+    results = self._task._load_run_results_from_bigquery(QUERY_FILE_PATH, False)
 
     insert_result = bq_to_pubsub_operator.RunResult(
         CHANNEL_ONLINE,
@@ -276,7 +306,7 @@ class GetRunResultsAndTriggerReportingTest(unittest.TestCase):
     query_result_list = [DUMMY_QUERY_RESULTS_FOR_ONLINE[0]]
     bq_result = pd.DataFrame(data=query_result_list, columns=BQ_COLUMNS)
     self._mock_bq_hook.return_value.get_pandas_df.return_value = bq_result
-    results = self._task._load_run_results_from_bigquery(QUERY_FILE_PATH)
+    results = self._task._load_run_results_from_bigquery(QUERY_FILE_PATH, False)
 
     insert_result = bq_to_pubsub_operator.RunResult(
         CHANNEL_ONLINE,
@@ -293,14 +323,14 @@ class GetRunResultsAndTriggerReportingTest(unittest.TestCase):
     bq_result = pd.DataFrame(data=query_result_list, columns=BQ_COLUMNS)
     self._mock_bq_hook.return_value.get_pandas_df.return_value = bq_result
 
-    results = self._task._load_run_results_from_bigquery(QUERY_FILE_PATH)
+    results = self._task._load_run_results_from_bigquery(QUERY_FILE_PATH, False)
 
     self.assertListEqual([], results)
 
   def test_load_result_with_non_existing_query_path(self):
     with self.assertRaises(bq_to_pubsub_operator.BigQueryAPICallError):
       with mock.patch('builtins.open', side_effect=IOError):
-        self._task._load_run_results_from_bigquery(QUERY_FILE_PATH)
+        self._task._load_run_results_from_bigquery(QUERY_FILE_PATH, False)
 
   def test_send_summary_to_pubsub(self):
     results = {
@@ -311,7 +341,7 @@ class GetRunResultsAndTriggerReportingTest(unittest.TestCase):
                                             DUMMY_INSERT_SKIPPED)
     }
 
-    self._task._send_run_results_to_pubsub(results)
+    self._task._send_run_results_to_pubsub(results, False)
 
     self._mock_pubsub_hook.return_value.publish.assert_called()
 
