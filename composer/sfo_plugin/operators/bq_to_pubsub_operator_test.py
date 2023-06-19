@@ -223,7 +223,7 @@ class GetRunResultsAndTriggerReportingTest(unittest.TestCase):
         {
             'attributes': {
                 'content_api_results': expected_content_api_results,
-                'local_inventory_feed_enabled': local_feeds_enabled,
+                'local_inventory_feed_enabled': str(local_feeds_enabled),
             }
         }
     ]

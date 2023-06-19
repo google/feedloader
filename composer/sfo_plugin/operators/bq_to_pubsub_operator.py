@@ -235,7 +235,7 @@ class GetRunResultsAndTriggerReportingOperator(models.BaseOperator):
             'content_api_results': json.dumps(
                 results, default=_convert_run_result_into_json
             ),
-            'local_inventory_feed_enabled': local_inventory_feed_enabled
+            'local_inventory_feed_enabled': str(local_inventory_feed_enabled)
         }
     }
     logging.info('Message constructed for mailer: %s', message)
