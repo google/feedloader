@@ -16,6 +16,7 @@
 
 """Module that sends a completion email when Feedloader finishes all uploads."""
 
+import ast
 import datetime
 import httplib
 import json
@@ -161,9 +162,9 @@ def _extract_local_feed_setting(request_body):
   local_inventory_feed_enabled = (
       request_body.get('message', {})
       .get('attributes', {})
-      .get('local_inventory_feed_enabled', False)
+      .get('local_inventory_feed_enabled', 'False')
   )
-  return bool(local_inventory_feed_enabled)
+  return ast.literal_eval(local_inventory_feed_enabled)
 
 
 def _get_run_result_list(run_results_dict):

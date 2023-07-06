@@ -228,7 +228,7 @@
                                         <th>Failed</th>
                                         <th>Missing Merchant ID <small>(not processed)</small></th>
                                     </tr>
-                                    {% for result in runResults['online'] %}
+                                    {% for result in runResults['local'] %}
                                         <tr align="center">
                                             <td><i>{{ result.description }}</i></td>
                                             <td>{{ result.success_count }}</td>
