@@ -4,7 +4,7 @@ url = "https://pypi.org/simple"
 verify_ssl = true
 
 [dev-packages]
-apache-airflow = {version = "==2.3.3", extras = ["gcp"]}
+apache-airflow = {version = "==2.6.3", extras = ["gcp"]}
 
 [packages]
 attrs = "==20.3.0"
