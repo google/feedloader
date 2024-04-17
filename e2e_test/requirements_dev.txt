@@ -35,7 +35,7 @@ google-cloud-tasks==0.4.0
 googleapis-common-protos==1.5.8
 grpc-google-iam-v1==0.11.4
 grpcio==1.18.0
-gunicorn==19.9.0
+gunicorn==22.0.0
 html5lib==1.0.1
 httplib2==0.12.1
 idna==2.8
