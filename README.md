@@ -227,7 +227,7 @@ GCP project when proceeding with the below guide.**
 
 -   Upload your feed files to GCP Cloud Storage using this command:
 
-    `gsutil cp -j csv $FEED_PATH/* $FEED_BUCKET`
+    `gcloud storage cp --gzip-in-flight="csv" $FEED_PATH/* $FEED_BUCKET`
 
 -   **Wait until all feed files are uploaded.** Depending on the number and size
     of the files, this may take several minutes to fully load into BigQuery. We
@@ -239,7 +239,7 @@ GCP project when proceeding with the below guide.**
 
     `touch ~/[PATH_TO_EOF]/EOF`
 
-    `gsutil cp [PATH_TO_EOF]/EOF $UPDATE_BUCKET`
+    `gcloud storage cp [PATH_TO_EOF]/EOF $UPDATE_BUCKET`
 
 -   Feedloader will process items that require changes in Content API (new
     items, updated items, deleted items, and items about to expire), and send
