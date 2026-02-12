@@ -79,11 +79,11 @@ bq mk -t \
   feed_data.items_expiration_tracking
 print_green "Finished recreating tables. Proceeding to upload feeds to GCS..."
 
-gcloud storage cp --gzip-in-flight "${FEED_PATH%/}"/*."${FEED_EXTENSION#.}" gs://"${GCP_PROJECT}"-feed
+gcloud storage cp --gzip-in-flight="csv" "${FEED_PATH%/}"/*."${FEED_EXTENSION#.}" gs://"${GCP_PROJECT}"-feed
 print_green "Finished uploading feed files. You can check the logs at ${HYPERLINK}https://console.cloud.google.com/functions/details/us-central1/import_storage_file_into_big_query?project=${GCP_PROJECT}&tab=logs\ahttps://console.cloud.google.com/functions/details/us-central1/import_storage_file_into_big_query?project=${GCP_PROJECT}&tab=logs${HYPERLINK}\a. Pausing before uploading EOF..."
 sleep 120
 
-gcloud storage cp --gzip-in-flight "${EOF_PATH}" gs://"${GCP_PROJECT}"-update
+gcloud storage cp --gzip-in-flight="csv" "${EOF_PATH}" gs://"${GCP_PROJECT}"-update
 print_green "Finished uploading EOF. You can check the logs at ${HYPERLINK}https://console.cloud.google.com/functions/details/us-central1/calculate_product_changes?project=${GCP_PROJECT}&tab=logs\ahttps://console.cloud.google.com/functions/details/us-central1/calculate_product_changes?project=${GCP_PROJECT}&tab=logs${HYPERLINK}\a"
 sleep 30
 
@@ -112,11 +112,11 @@ wait $!
 sed -i '' '2i\'$'\n'"$PRODUCT_ID""$(printf '\t')Test$(printf '\t')""${REST_OF_LINE}"$'\n' "$ONE_FILE" &
 wait $!
 
-gcloud storage cp --gzip-in-flight "${FEED_PATH%/}"/*."${FEED_EXTENSION#.}" gs://"${GCP_PROJECT}"-feed
+gcloud storage cp --gzip-in-flight="csv" "${FEED_PATH%/}"/*."${FEED_EXTENSION#.}" gs://"${GCP_PROJECT}"-feed
 print_green "Finished uploading all feed files with an update included. You can check the logs at ${HYPERLINK}https://console.cloud.google.com/functions/details/us-central1/import_storage_file_into_big_query?project=${GCP_PROJECT}&tab=logs\ahttps://console.cloud.google.com/functions/details/us-central1/import_storage_file_into_big_query?project=${GCP_PROJECT}&tab=logs${HYPERLINK}\a. Pausing before uploading EOF..."
 sleep 120
 
-gcloud storage cp --gzip-in-flight "${EOF_PATH}" gs://"${GCP_PROJECT}"-update
+gcloud storage cp --gzip-in-flight="csv" "${EOF_PATH}" gs://"${GCP_PROJECT}"-update
 print_green "Finished uploading EOF. You can check the logs at ${HYPERLINK}https://console.cloud.google.com/functions/details/us-central1/calculate_product_changes?project=${GCP_PROJECT}&tab=logs\ahttps://console.cloud.google.com/functions/details/us-central1/calculate_product_changes?project=${GCP_PROJECT}&tab=logs${HYPERLINK}\a"
 
 # Restore the line to the test file.
