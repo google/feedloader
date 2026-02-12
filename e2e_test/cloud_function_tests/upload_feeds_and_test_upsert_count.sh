@@ -61,11 +61,11 @@ if [[ -z "$4" ]]; then
 fi
 
 print_green  "Starting automation of feed file uploads to Feedloader. First cleaning the state of the GCS buckets and BQ tables..."
-gsutil rm gs://"${GCP_PROJECT}"-update/*
-gsutil rm gs://"${GCP_PROJECT}"-lock/*
-gsutil rm gs://"${GCP_PROJECT}"-feed/*
-gsutil rm gs://"${GCP_PROJECT}"-retrigger/*
-gsutil rm gs://"${GCP_PROJECT}"-completed/*
+gcloud storage rm gs://"${GCP_PROJECT}"-update/*
+gcloud storage rm gs://"${GCP_PROJECT}"-lock/*
+gcloud storage rm gs://"${GCP_PROJECT}"-feed/*
+gcloud storage rm gs://"${GCP_PROJECT}"-retrigger/*
+gcloud storage rm gs://"${GCP_PROJECT}"-completed/*
 bq rm -f feed_data.items
 bq rm -f feed_data.streaming_items
 bq rm -f feed_data.items_expiration_tracking
@@ -79,11 +79,11 @@ bq mk -t \
   feed_data.items_expiration_tracking
 print_green "Finished recreating tables. Proceeding to upload feeds to GCS..."
 
-gsutil -m cp -j csv "${FEED_PATH%/}"/*."${FEED_EXTENSION#.}" gs://"${GCP_PROJECT}"-feed
+gcloud storage cp --gzip-in-flight="csv" "${FEED_PATH%/}"/*."${FEED_EXTENSION#.}" gs://"${GCP_PROJECT}"-feed
 print_green "Finished uploading feed files. You can check the logs at ${HYPERLINK}https://console.cloud.google.com/functions/details/us-central1/import_storage_file_into_big_query?project=${GCP_PROJECT}&tab=logs\ahttps://console.cloud.google.com/functions/details/us-central1/import_storage_file_into_big_query?project=${GCP_PROJECT}&tab=logs${HYPERLINK}\a. Pausing before uploading EOF..."
 sleep 120
 
-gsutil -m cp -j csv "${EOF_PATH}" gs://"${GCP_PROJECT}"-update
+gcloud storage cp --gzip-in-flight="csv" "${EOF_PATH}" gs://"${GCP_PROJECT}"-update
 print_green "Finished uploading EOF. You can check the logs at ${HYPERLINK}https://console.cloud.google.com/functions/details/us-central1/calculate_product_changes?project=${GCP_PROJECT}&tab=logs\ahttps://console.cloud.google.com/functions/details/us-central1/calculate_product_changes?project=${GCP_PROJECT}&tab=logs${HYPERLINK}\a"
 sleep 30
 
@@ -112,11 +112,11 @@ wait $!
 sed -i '' '2i\'$'\n'"$PRODUCT_ID""$(printf '\t')Test$(printf '\t')""${REST_OF_LINE}"$'\n' "$ONE_FILE" &
 wait $!
 
-gsutil -m cp -j csv "${FEED_PATH%/}"/*."${FEED_EXTENSION#.}" gs://"${GCP_PROJECT}"-feed
+gcloud storage cp --gzip-in-flight="csv" "${FEED_PATH%/}"/*."${FEED_EXTENSION#.}" gs://"${GCP_PROJECT}"-feed
 print_green "Finished uploading all feed files with an update included. You can check the logs at ${HYPERLINK}https://console.cloud.google.com/functions/details/us-central1/import_storage_file_into_big_query?project=${GCP_PROJECT}&tab=logs\ahttps://console.cloud.google.com/functions/details/us-central1/import_storage_file_into_big_query?project=${GCP_PROJECT}&tab=logs${HYPERLINK}\a. Pausing before uploading EOF..."
 sleep 120
 
-gsutil -m cp -j csv "${EOF_PATH}" gs://"${GCP_PROJECT}"-update
+gcloud storage cp --gzip-in-flight="csv" "${EOF_PATH}" gs://"${GCP_PROJECT}"-update
 print_green "Finished uploading EOF. You can check the logs at ${HYPERLINK}https://console.cloud.google.com/functions/details/us-central1/calculate_product_changes?project=${GCP_PROJECT}&tab=logs\ahttps://console.cloud.google.com/functions/details/us-central1/calculate_product_changes?project=${GCP_PROJECT}&tab=logs${HYPERLINK}\a"
 
 # Restore the line to the test file.

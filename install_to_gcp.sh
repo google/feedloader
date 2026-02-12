@@ -181,11 +181,11 @@ CreateBuckets() {
   )
   for BUCKET in "${STORAGE_BUCKETS[@]}"
   do
-    BUCKET_CREATE_RESULT=$(gsutil mb -l "$REGION" "$BUCKET" 2>&1)
+    BUCKET_CREATE_RESULT=$(gcloud storage buckets create --location="$REGION" "$BUCKET" 2>&1)
     sleep 1
     if [[ $BUCKET_CREATE_RESULT = *"Did you mean to use a gs:// URL"* ]]
     then
-      gsutil mb -l "$REGION" "gs://$BUCKET"
+      gcloud storage buckets create --location="$REGION" "gs://$BUCKET"
       sleep 1
     fi
   done
@@ -193,7 +193,7 @@ CreateBuckets() {
   # (Strip gs:// if it exists and re-add it to ensure valid bucket name)
   local ARCHIVE_BUCKET=${ARCHIVE_BUCKET/gs:\/\/}
   local ARCHIVE_BUCKET="gs://$ARCHIVE_BUCKET"
-  gsutil lifecycle set archive_bucket_lifecycle.json "$ARCHIVE_BUCKET"
+  gcloud storage buckets update "$ARCHIVE_BUCKET" --lifecycle-file=archive_bucket_lifecycle.json
 }
 
 CreateBuckets "$ARCHIVE_BUCKET" "$COMPLETED_FILES_BUCKET" "$FEED_BUCKET" \
