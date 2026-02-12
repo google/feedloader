@@ -249,7 +249,7 @@ You can send POST requests to AppEngine directly without triggering Cloud Pub/Su
 This section documents the steps required to manually prevent items from expiring. It must be done once per month in the absence of an automated job.
 
 1. Ensure the last run’s feed files have been archived in GCS.
-2. If there is no archive, download the last batch of files directly from the bucket using: `gsutil -m cp -R “gs://[feed bucket]/*” ./`
+2. If there is no archive, download the last batch of files directly from the bucket using: `gcloud storage cp --recursive “gs://[feed bucket]/*” ./`
 3. Take a BigQuery backup of the table `streaming_items` either with the backup feature or by copying the table with the name `streaming_items_backup_[DATE]`
 4. Change the environment variable in the calculate_product_changes Cloud Function for UPSERT_THRESHOLD to 100000000
 5. Clear out the `streaming_items` table by running this query in BigQuery: `DELETE FROM [project + schema].streaming_items WHERE true`.
@@ -278,7 +278,7 @@ In the case that PubSub messages do not get sent, follow the below steps.
 A: Logs can be found from the Cloud Console’s Logging tool. Click on “Logs Viewer” and then filter the logs for the specific thing you want to see.
 
 ##### Q: How do I test a feed upload?
-A: Prepare a properly-formatted feed file (TSV-format, matching the schema in `feed_schema_config.json`. Upload it to the feed bucket in Cloud Storage (as defined by your `FEED_BUCKET` environment variable at install time. Upload it to Cloud Storage using the following command: `gsutil cp -j -m csv ../Sample_Feed/MultipleTest/* gs://pla-feed`. You can remove `-m` if you want to upload files sequentially, since `-m` uploads them in parallel.
+A: Prepare a properly-formatted feed file (TSV-format, matching the schema in `feed_schema_config.json`. Upload it to the feed bucket in Cloud Storage (as defined by your `FEED_BUCKET` environment variable at install time. Upload it to Cloud Storage using the following command: `gcloud storage cp --gzip-in-flight csv ../Sample_Feed/MultipleTest/* gs://pla-feed`. You can remove `-m` if you want to upload files sequentially, since `-m` uploads them in parallel.
 
 ##### Q: How do I check that the feeds were uploaded successfully?`
 A: The feeds can be found in Cloud Storage, they go into the feed bucket named by your environment variable `FEED_BUCKET`. However, in order to check that the files were converted into a BigQuery table, you can check the `items` table was created and was populated in BigQuery. Feedloader also does checks that file content conversions into BigQuery were actually completed by populating a GCS bucket with the name denoted by your `COMPLETED_FILES_BUCKET` environment variable. Check that all the filenames show up in this bucket that you actually attempted to upload to further ensure that feeds uploaded successfully. Finally, you may do a count comparison of the total number of rows in your feeds with the number of rows in the `items` BigQuery table.
