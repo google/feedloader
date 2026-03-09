@@ -13,7 +13,7 @@ idna==3.3
 packaging==21.3
 parameterized==0.8.1
 proto-plus==1.19.6
-protobuf==3.20.0
+protobuf==3.20.2
 pyasn1-modules==0.2.8
 pyasn1==0.4.8
 pyparsing==3.0.9
