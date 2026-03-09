@@ -21,7 +21,7 @@ itsdangerous==1.1.0
 jinja2==2.10.3
 markupsafe==1.1.1
 parameterized==0.7.0
-protobuf==3.10.0
+protobuf==3.18.3
 pyasn1-modules==0.2.7
 pyasn1==0.4.7
 pytz==2019.3
