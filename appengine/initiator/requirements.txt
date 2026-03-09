@@ -16,7 +16,7 @@ google-resumable-media==0.4.1
 googleapis-common-protos[grpc]==1.6.0
 grpc-google-iam-v1==0.12.3
 grpcio==1.24.3
-idna==2.8
+idna==3.7
 itsdangerous==1.1.0
 jinja2==2.10.3
 markupsafe==1.1.1
